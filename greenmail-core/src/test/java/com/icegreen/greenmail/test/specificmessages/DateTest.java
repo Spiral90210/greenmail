@@ -11,13 +11,11 @@ import org.junit.Test;
 import javax.mail.Message;
 import javax.mail.MessagingException;
 import javax.mail.internet.MimeMessage;
-import java.io.IOException;
+import java.util.Calendar;
 import java.util.Date;
 import java.util.GregorianCalendar;
 
-import static org.hamcrest.Matchers.is;
-import static org.hamcrest.Matchers.lessThan;
-import static org.junit.Assert.assertThat;
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Tests date handling for received messages
@@ -27,13 +25,13 @@ public class DateTest {
     public GreenMailRule greenMail = new GreenMailRule(ServerSetupTest.SMTP_POP3_IMAP);
 
     @Test
-    public void testDatesCorrect() throws MessagingException, IOException {
+    public void testDatesCorrect() throws MessagingException {
         String to = "to@localhost";
         greenMail.setUser(to, to);
 
         // Create mail with specific 'sent' date
         final MimeMessage mail = GreenMailUtil.createTextEmail(to, "from@localhost", "Subject", "msg", greenMail.getSmtp().getServerSetup());
-        final Date sentDate = new GregorianCalendar(2000, 1, 1, 0, 0, 0).getTime();
+        final Date sentDate = new GregorianCalendar(2000, Calendar.FEBRUARY, 1, 0, 0, 0).getTime();
         mail.setSentDate(sentDate);
         GreenMailUtil.sendMimeMessage(mail);
 
@@ -52,14 +50,14 @@ public class DateTest {
      * @param checkReceivedDate True if received date should be checked. POP3 does not provide a received date
      */
     private void retrieveAndCheck(AbstractServer server, String to, Date sentDate, boolean checkReceivedDate)
-            throws MessagingException, IOException {
+            throws MessagingException {
         try (Retriever retriever = new Retriever(server)) {
             Message[] messages = retriever.getMessages(to);
-            assertThat(messages.length, is(1));
+            assertThat(messages.length).isEqualTo(1);
             Message message = messages[0];
-            assertThat(milliSecondDateDiff(message.getSentDate(), sentDate), lessThan(3000L));
+            assertThat(milliSecondDateDiff(message.getSentDate(), sentDate)).isLessThan(3000L);
             if (checkReceivedDate) {
-                assertThat(milliSecondDateDiff(message.getReceivedDate(), new Date()), lessThan(3000L));
+                assertThat(milliSecondDateDiff(message.getReceivedDate(), new Date())).isLessThan(3000L);
             }
         }
     }

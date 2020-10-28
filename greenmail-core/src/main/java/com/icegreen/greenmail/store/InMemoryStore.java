@@ -6,11 +6,11 @@
  */
 package com.icegreen.greenmail.store;
 
-import com.icegreen.greenmail.imap.ImapConstants;
-
+import java.util.*;
 import javax.mail.MessagingException;
 import javax.mail.Quota;
-import java.util.*;
+
+import com.icegreen.greenmail.imap.ImapConstants;
 
 /**
  * A simple in-memory implementation of {@link Store}, used for testing
@@ -22,8 +22,8 @@ import java.util.*;
 public class InMemoryStore
         implements Store, ImapConstants {
     boolean quotaSupported = true;
-    private RootFolder rootMailbox = new RootFolder();
-    private Map<String, Set<Quota>> quotaMap = new HashMap<>();
+    private final RootFolder rootMailbox = new RootFolder();
+    private final Map<String, Set<Quota>> quotaMap = new HashMap<>();
 
     @Override
     public MailFolder getMailbox(String absoluteMailboxName) {
@@ -57,8 +57,7 @@ public class InMemoryStore
             throw new FolderException("Invalid mailbox name "+mailboxName);
         }
         HierarchicalFolder castParent = (HierarchicalFolder) parent;
-        HierarchicalFolder child = new HierarchicalFolder(castParent, mailboxName);
-        castParent.getChildren().add(child);
+        HierarchicalFolder child = castParent.createChild(mailboxName);
         child.setSelectable(selectable);
         return child;
     }
@@ -67,7 +66,7 @@ public class InMemoryStore
     public void deleteMailbox(MailFolder folder) throws FolderException {
         HierarchicalFolder toDelete = (HierarchicalFolder) folder;
 
-        if (!toDelete.getChildren().isEmpty()) {
+        if (toDelete.hasChildren()) {
             throw new FolderException("Cannot delete mailbox with children.");
         }
 
@@ -76,11 +75,11 @@ public class InMemoryStore
         }
 
         HierarchicalFolder parent = toDelete.getParent();
-        parent.getChildren().remove(toDelete);
+        parent.removeChild(toDelete);
     }
 
     @Override
-    public void renameMailbox(MailFolder existingFolder, String newName) throws FolderException {
+    public void renameMailbox(MailFolder existingFolder, String newName) {
         HierarchicalFolder toRename = (HierarchicalFolder) existingFolder;
         HierarchicalFolder parent = toRename.getParent();
 
@@ -100,7 +99,7 @@ public class InMemoryStore
             toRename.setName(newFolderName);
         } else {
             // Hierarchy change
-            parent.getChildren().remove(toRename);
+            parent.removeChild(toRename);
             HierarchicalFolder userFolder = getInboxOrUserRootFolder(toRename);
             String[] path = newName.split('\\' + ImapConstants.HIERARCHY_DELIMITER);
             HierarchicalFolder newParent = userFolder;
@@ -113,16 +112,16 @@ public class InMemoryStore
     }
 
     private HierarchicalFolder getInboxOrUserRootFolder(HierarchicalFolder folder) {
-        final HierarchicalFolder inboxFolder = findParentByName(folder, ImapConstants.INBOX_NAME);
+        final HierarchicalFolder inboxFolder = findParentByName(folder);
         if(null==inboxFolder) {
             return folder.getParent();
         }
         return inboxFolder.getParent();
     }
 
-    private HierarchicalFolder findParentByName(HierarchicalFolder folder, String name) {
+    private HierarchicalFolder findParentByName(HierarchicalFolder folder) {
         HierarchicalFolder currentFolder = folder;
-        while (null != currentFolder && !name.equals(currentFolder.getName())) {
+        while (null != currentFolder && !ImapConstants.INBOX_NAME.equals(currentFolder.getName())) {
             currentFolder = currentFolder.getParent();
         }
         return currentFolder;
@@ -130,8 +129,7 @@ public class InMemoryStore
 
     @Override
     public Collection<MailFolder> getChildren(MailFolder parent) {
-        Collection<HierarchicalFolder> children = ((HierarchicalFolder) parent).getChildren();
-        return Collections.<MailFolder>unmodifiableCollection(children);
+        return Collections.unmodifiableCollection(((HierarchicalFolder) parent).getChildren());
     }
 
     @Override
@@ -149,7 +147,8 @@ public class InMemoryStore
         // We only handle wildcard at the end of the search pattern.
         if ((starIndex > -1 && starIndex < searchPattern.length() - 1) ||
                 (percentIndex > -1 && percentIndex < searchPattern.length() - 1)) {
-            throw new FolderException("WIldcard characters are only handled as the last character of a list argument.");
+            throw new FolderException("Wildcard characters <" + searchPattern
+                    + "> are only handled as the last character of a list argument");
         }
 
         List<MailFolder> mailboxes = new ArrayList<>();
@@ -167,8 +166,7 @@ public class InMemoryStore
             // If the parent from the search pattern doesn't exist,
             // return empty.
             if (parent != null) {
-                for (final Object o : parent.getChildren()) {
-                    HierarchicalFolder child = (HierarchicalFolder) o;
+                for (final HierarchicalFolder child : parent.getChildren()) {
                     if (child.getName().startsWith(matchPattern)) {
                         mailboxes.add(child);
 
@@ -209,7 +207,7 @@ public class InMemoryStore
             }
         }
         updateQuotas(collectedQuotas, qualifiedRootPrefix);
-        return collectedQuotas.toArray(new Quota[collectedQuotas.size()]);
+        return collectedQuotas.toArray(new Quota[0]);
     }
 
     private void updateQuotas(final Set<Quota> quotas,

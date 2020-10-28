@@ -4,31 +4,28 @@ import org.junit.Test;
 
 import java.util.Random;
 
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.is;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertThat;
+import static org.assertj.core.api.Assertions.assertThat;
 
 public class MaxSizeLinkedHashMapTest {
     private static final int TEST_MAX_SIZE = 8;
-    private MaxSizeLinkedHashMap<Integer, Integer> map = new MaxSizeLinkedHashMap<Integer, Integer>(TEST_MAX_SIZE);
+    private MaxSizeLinkedHashMap<Integer, Integer> map = new MaxSizeLinkedHashMap<>(TEST_MAX_SIZE);
 
     @Test(expected = IllegalArgumentException.class)
     public void shouldRejectNegativeMaxSize() {
-        new MaxSizeLinkedHashMap<Object, Object>(-1 * Math.abs(new Random().nextInt(Integer.MAX_VALUE - 1) + 1));
+        new MaxSizeLinkedHashMap<>(-1 * Math.abs(new Random().nextInt(Integer.MAX_VALUE - 1) + 1));
     }
 
     @Test(expected = IllegalArgumentException.class)
     public void shouldRejectZeroMaxSize() {
-        new MaxSizeLinkedHashMap<Object, Object>(0);
+        new MaxSizeLinkedHashMap<>(0);
     }
 
     @Test
     public void shouldRejectLessThanZeroMaxSize() {
         try {
-            new MaxSizeLinkedHashMap<Object, Object>(-1);
+            new MaxSizeLinkedHashMap<>(-1);
         } catch (IllegalArgumentException ex) {
-            assertEquals("The maxSize must be greater than 0: -1", ex.getMessage());
+            assertThat(ex.getMessage()).isEqualTo("The maxSize must be greater than 0: -1");
         }
     }
 
@@ -40,6 +37,6 @@ public class MaxSizeLinkedHashMapTest {
         }
 
         // Then
-        assertThat(map.size(), is(equalTo(TEST_MAX_SIZE)));
+        assertThat(map.size()).isEqualTo(TEST_MAX_SIZE);
     }
 }

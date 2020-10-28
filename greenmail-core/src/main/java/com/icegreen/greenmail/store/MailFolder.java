@@ -23,7 +23,7 @@ import java.util.List;
  * TODO this is a "grown" interface, which needs some more design and thought re:
  * how it will fit in with the other mail storage in James.
  *
- * @author Darrell DeBoer <darrell@apache.org>
+ * @author <a href="mailto:darrell@apache.org">Darrell DeBoer</a>
  * @version $Revision: 109034 $
  */
 public interface MailFolder {
@@ -45,7 +45,18 @@ public interface MailFolder {
 
     boolean isSelectable();
 
+    /**
+     * @deprecated Use #getUIDNext()
+     *
+     * Deprecated in 1.6, to be removed in 1.7 (TODO)
+     */
+    @Deprecated
     long getUidNext();
+
+    /**
+     * {@inheritDoc}
+     */
+    long getUIDNext();
 
     /**
      * Appends a message.

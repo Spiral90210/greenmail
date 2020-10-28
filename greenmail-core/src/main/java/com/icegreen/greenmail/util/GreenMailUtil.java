@@ -4,20 +4,20 @@
  */
 package com.icegreen.greenmail.util;
 
-import com.icegreen.greenmail.user.GreenMailUser;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
+import java.io.*;
+import java.util.Date;
+import java.util.Properties;
+import java.util.Random;
 import javax.activation.DataHandler;
 import javax.activation.DataSource;
 import javax.mail.*;
 import javax.mail.internet.MimeBodyPart;
 import javax.mail.internet.MimeMessage;
 import javax.mail.internet.MimeMultipart;
-import java.io.*;
-import java.util.Date;
-import java.util.Properties;
-import java.util.Random;
+
+import com.icegreen.greenmail.user.GreenMailUser;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * @author Wael Chatila
@@ -32,25 +32,16 @@ public class GreenMailUtil {
     private static int generateCount = 0;
     private static final String GENERATE_SET = "abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPRSTUVWXYZ23456789";
     private static final int GENERATE_SET_SIZE = GENERATE_SET.length();
-
-    private static GreenMailUtil instance = new GreenMailUtil();
+    private static final Random RANDOM = new Random();
 
     private GreenMailUtil() {
         //empty
     }
 
     /**
-     * @deprecated As of 1.5 and to be removed in 1.6. No need to instantiate static helper class
-     */
-    @Deprecated
-    public static GreenMailUtil instance() {
-        return instance;
-    }
-
-    /**
      * Writes the content of an input stream to an output stream
      *
-     * @throws IOException
+     * @throws IOException on io error.
      */
     public static void copyStream(final InputStream src, OutputStream dest) throws IOException {
         byte[] buffer = new byte[1024];
@@ -68,7 +59,9 @@ public class GreenMailUtil {
      */
     public static MimeMessage newMimeMessage(InputStream inputStream) {
         try {
-            return new MimeMessage(Session.getDefaultInstance(new Properties()), inputStream);
+            final Properties props = new Properties();
+            props.put("mail.mime.allowutf8", System.getProperty("mail.mime.allowutf8","true"));
+            return new MimeMessage(Session.getDefaultInstance(props), inputStream);
         } catch (MessagingException e) {
             throw new IllegalArgumentException("Can not generate mime message for input stream " + inputStream, e);
         }
@@ -76,10 +69,8 @@ public class GreenMailUtil {
 
     /**
      * Convenience method which creates a new {@link MimeMessage} from a string
-     *
-     * @throws MessagingException
      */
-    public static MimeMessage newMimeMessage(String mailString) throws MessagingException {
+    public static MimeMessage newMimeMessage(String mailString) {
         return newMimeMessage(EncodingUtil.toStream(mailString, EncodingUtil.CHARSET_EIGHT_BIT_ENCODING));
     }
 
@@ -104,23 +95,22 @@ public class GreenMailUtil {
     }
 
     /**
-     * @return Returns the number of lines in any string
+     * Counts the number of lines.
+     *
+     * @param str the input string
+     * @return Returns the number of lines terminated by '\n' in string
      */
     public static int getLineCount(String str) {
-        LineNumberReader reader = new LineNumberReader(new StringReader(str));
-        try {
-            reader.skip(Long.MAX_VALUE);
-            return reader.getLineNumber();
-        } catch (IOException e) {
-            throw new IllegalStateException(e);
-        } finally {
-            try {
-                reader.close();
-            } catch (IOException e) {
-                // Ignore but warn
-                log.warn("Can not close reader", e);
+        if (null == str || str.isEmpty()) {
+            return 0;
+        }
+        int count = 1;
+        for (char c : str.toCharArray()) {
+            if ('\n' == c) {
+                count++;
             }
         }
+        return count;
     }
 
     /**
@@ -129,7 +119,7 @@ public class GreenMailUtil {
     public static String getBody(Part msg) {
         String all = getWholeMessage(msg);
         int i = all.indexOf("\r\n\r\n");
-        return i < 0 ? "" /* empty body */ : all.substring(i + 4, all.length());
+        return i < 0 ? "" /* empty body */ : all.substring(i + 4);
     }
 
     /**
@@ -180,16 +170,14 @@ public class GreenMailUtil {
      * @return the random string.
      */
     public static String random() {
-        Random r = new Random();
-        int nbrOfLetters = r.nextInt(3) + 5;
+        int nbrOfLetters = RANDOM.nextInt(3) + 5;
         return random(nbrOfLetters);
     }
 
     public static String random(int nbrOfLetters) {
-        Random r = new Random();
         StringBuilder ret = new StringBuilder();
         for (/* empty */; nbrOfLetters > 0; nbrOfLetters--) {
-            int pos = (r.nextInt(GENERATE_SET_SIZE) + (++generateCount)) % GENERATE_SET_SIZE;
+            int pos = (RANDOM.nextInt(GENERATE_SET_SIZE) + (++generateCount)) % GENERATE_SET_SIZE;
             ret.append(GENERATE_SET.charAt(pos));
         }
         return ret.toString();
@@ -321,7 +309,7 @@ public class GreenMailUtil {
      * @param description Description of the attachment
      * @return New multipart
      */
-    private static MimeMultipart createMultipartWithAttachment(String msg, final byte[] attachment, final String contentType,
+    public static MimeMultipart createMultipartWithAttachment(String msg, final byte[] attachment, final String contentType,
                                                                final String filename, String description) {
         try {
             MimeMultipart multiPart = new MimeMultipart();
@@ -335,7 +323,7 @@ public class GreenMailUtil {
 
             DataSource ds = new DataSource() {
                 @Override
-                public InputStream getInputStream() throws IOException {
+                public InputStream getInputStream() {
                     return new ByteArrayInputStream(attachment);
                 }
 
@@ -365,6 +353,12 @@ public class GreenMailUtil {
         }
     }
 
+    /**
+     * Gets a JavaMail Session for given server type such as IMAP and additional props for JavaMail.
+     *
+     * @param setup     the setup type, such as <code>ServerSetup.IMAP</code>
+     * @return the JavaMail session.
+     */
     public static Session getSession(final ServerSetup setup) {
         return getSession(setup, null);
     }
@@ -377,12 +371,20 @@ public class GreenMailUtil {
      * @return the JavaMail session.
      */
     public static Session getSession(final ServerSetup setup, Properties mailProps) {
-        Properties props = setup.configureJavaMailSessionProperties(mailProps, false);
+        return getSession(setup, mailProps, false);
+    }
 
-        if (log.isDebugEnabled()) {
-            log.debug("Mail session properties are " + props);
-        }
-
+    /**
+     * Gets a JavaMail Session for given server type such as IMAP and additional props for JavaMail.
+     *
+     * @param setup     the setup type, such as <code>ServerSetup.IMAP</code>
+     * @param mailProps additional mail properties.
+     * @param debug sets JavaMail debug properties.
+     * @return the JavaMail session.
+     */
+    public static Session getSession(final ServerSetup setup, Properties mailProps, boolean debug) {
+        Properties props = setup.configureJavaMailSessionProperties(mailProps, debug);
+        log.debug("Mail session properties are {}", props);
         return Session.getInstance(props, null);
     }
 

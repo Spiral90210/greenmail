@@ -4,6 +4,12 @@
  */
 package com.icegreen.greenmail.util;
 
+import java.util.*;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import javax.mail.MessagingException;
+import javax.mail.internet.MimeMessage;
+
 import com.icegreen.greenmail.Managers;
 import com.icegreen.greenmail.configuration.ConfiguredGreenMail;
 import com.icegreen.greenmail.configuration.GreenMailConfiguration;
@@ -11,7 +17,6 @@ import com.icegreen.greenmail.imap.ImapHostManager;
 import com.icegreen.greenmail.imap.ImapServer;
 import com.icegreen.greenmail.pop3.Pop3Server;
 import com.icegreen.greenmail.server.AbstractServer;
-import com.icegreen.greenmail.smtp.SmtpManager;
 import com.icegreen.greenmail.smtp.SmtpServer;
 import com.icegreen.greenmail.store.FolderException;
 import com.icegreen.greenmail.store.InMemoryStore;
@@ -22,18 +27,14 @@ import com.icegreen.greenmail.user.UserException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.mail.MessagingException;
-import javax.mail.internet.MimeMessage;
-import java.util.*;
-
 /**
  * Utility class that manages a greenmail server with support for multiple protocols
  */
 public class GreenMail extends ConfiguredGreenMail {
-    final Logger log = LoggerFactory.getLogger(GreenMail.class);
-    private Managers managers;
-    private Map<String, AbstractServer> services;
-    private ServerSetup[] config;
+    protected final Logger log = LoggerFactory.getLogger(GreenMail.class);
+    protected Managers managers;
+    protected Map<String, AbstractServer> services;
+    protected ServerSetup[] config;
 
     /**
      * Creates a SMTP, SMTPS, POP3, POP3S, IMAP, and IMAPS server binding onto non-default ports.
@@ -46,7 +47,7 @@ public class GreenMail extends ConfiguredGreenMail {
     /**
      * Call this constructor if you want to run one of the email servers only
      *
-     * @param config  Server setup to use
+     * @param config Server setup to use
      */
     public GreenMail(ServerSetup config) {
         this(new ServerSetup[]{config});
@@ -69,7 +70,7 @@ public class GreenMail extends ConfiguredGreenMail {
         if (managers == null) {
             managers = new Managers();
         }
-        if(services == null) {
+        if (services == null) {
             services = createServices(config, managers);
         }
     }
@@ -88,20 +89,20 @@ public class GreenMail extends ConfiguredGreenMail {
             try {
                 service.waitTillRunning(service.getServerSetup().getServerStartupTimeout());
             } catch (InterruptedException ex) {
+                Thread.currentThread().interrupt();
                 throw new IllegalStateException("Could not start mail service " + service, ex);
             }
 
         }
 
-        if (log.isDebugEnabled()) {
-            log.debug("Started services, performing check if all up");
-        }
+        log.debug("Started services, performing check if all up");
         // Make sure if all services are up in a second loop, giving slow services more time.
         for (AbstractServer service : servers) {
             if (!service.isRunning()) {
                 throw new IllegalStateException("Could not start mail server " + service
                         + ", try to set server startup timeout > " + service.getServerSetup().getServerStartupTimeout()
-                        + " via " + ServerSetup.class.getSimpleName() + ".setServerStartupTimeout(timeoutInMs)");
+                        + " via " + ServerSetup.class.getSimpleName() + ".setServerStartupTimeout(timeoutInMs) or " +
+                        "-Dgreenmail.startup.timeout");
             }
         }
 
@@ -110,15 +111,11 @@ public class GreenMail extends ConfiguredGreenMail {
 
     @Override
     public synchronized void stop() {
-        if (log.isDebugEnabled()) {
-            log.debug("Stopping GreenMail ...");
-        }
+        log.debug("Stopping GreenMail ...");
 
         if (services != null) {
             for (Service service : services.values()) {
-                if (log.isDebugEnabled()) {
-                    log.debug("Stopping service " + service.toString());
-                }
+                log.debug("Stopping service {}", service);
                 service.stopService();
             }
         }
@@ -138,7 +135,7 @@ public class GreenMail extends ConfiguredGreenMail {
      * @param config Service configuration
      * @return Services map
      */
-    private static Map<String, AbstractServer> createServices(ServerSetup[] config, Managers mgr) {
+    protected Map<String, AbstractServer> createServices(ServerSetup[] config, Managers mgr) {
         Map<String, AbstractServer> srvc = new HashMap<>();
         for (ServerSetup setup : config) {
             if (srvc.containsKey(setup.getProtocol())) {
@@ -196,27 +193,20 @@ public class GreenMail extends ConfiguredGreenMail {
     //~ Convenience Methods, often needed while testing ---------------------------------------------------------------
     @Override
     public boolean waitForIncomingEmail(long timeout, int emailCount) {
-        final SmtpManager.WaitObject o = managers.getSmtpManager().createAndAddNewWaitObject(emailCount);
-        if (null == o) {
-            return true;
-        }
-
-        synchronized (o) {
-            long t0 = System.currentTimeMillis();
-            while (!o.isArrived()) {
-                //this loop is necessary to insure correctness, see documentation on Object.wait()
+        final CountDownLatch waitObject = managers.getSmtpManager().createAndAddNewWaitObject(emailCount);
+        final long endTime = System.currentTimeMillis() + timeout;
+            while (waitObject.getCount() > 0) {
+                final long waitTime = endTime - System.currentTimeMillis();
+                if (waitTime < 0L) {
+                    return waitObject.getCount() == 0;
+                }
                 try {
-                    o.wait(timeout);
+                    waitObject.await(waitTime, TimeUnit.MILLISECONDS);
                 } catch (InterruptedException e) {
-                    throw new RuntimeException("Thread was interrupted while waiting", e);
+                    // Continue loop, in case of premature interruption
                 }
-                if ((System.currentTimeMillis() - t0) > timeout) {
-                    return false;
-                }
-
             }
-        }
-        return true;
+        return waitObject.getCount() == 0;
     }
 
     @Override
@@ -235,15 +225,6 @@ public class GreenMail extends ConfiguredGreenMail {
         return ret;
     }
 
-    /**
-     * @deprecated As of 1.5 and to be removed in 1.6. Use {@link #getReceivedMessagesForDomain(String domain)} instead.
-     */
-    @Deprecated
-    @Override
-    public MimeMessage[] getReceviedMessagesForDomain(String domain) {
-        return getReceivedMessagesForDomain(domain);
-    }
-
     @Override
     public MimeMessage[] getReceivedMessagesForDomain(String domain) {
         List<StoredMessage> msgs = managers.getImapHostManager().getAllMessages();
@@ -251,7 +232,7 @@ public class GreenMail extends ConfiguredGreenMail {
         try {
             for (StoredMessage msg : msgs) {
                 String tos = GreenMailUtil.getAddressList(msg.getMimeMessage().getAllRecipients());
-                if (tos.toLowerCase().contains(domain)) {
+                if (tos.toLowerCase().contains(domain.toLowerCase())) {
                     ret.add(msg.getMimeMessage());
                 }
             }
@@ -311,13 +292,4 @@ public class GreenMail extends ConfiguredGreenMail {
             folder.deleteAllMessages();
         }
     }
-
-    /**
-     * @deprecated As of 1.5 and to be removed in 1.6. No need to instantiate static helper class
-     */
-    @Deprecated
-    public GreenMailUtil util() {
-        return GreenMailUtil.instance();
-    }
-
 }

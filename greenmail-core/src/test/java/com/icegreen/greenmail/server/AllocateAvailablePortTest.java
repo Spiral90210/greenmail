@@ -8,9 +8,7 @@ import org.junit.Test;
 
 import javax.mail.internet.MimeMessage;
 
-import static org.hamcrest.CoreMatchers.is;
-import static org.hamcrest.CoreMatchers.not;
-import static org.hamcrest.MatcherAssert.assertThat;
+import static org.assertj.core.api.Assertions.assertThat;
 
 public class AllocateAvailablePortTest {
 
@@ -22,16 +20,17 @@ public class AllocateAvailablePortTest {
     public final GreenMailRule greenMail = new GreenMailRule(allocateAnyFreePortForAnSmtpServer);
 
     @Test
-    public void returnTheActuallyAllocatedPort() throws Exception {
-        assertThat(greenMail.getSmtp().getPort(), not(0));
+    public void returnTheActuallyAllocatedPort() {
+        assertThat(greenMail.getSmtp().getPort()).isNotEqualTo(0);
     }
 
     @Test
-    public void ensureThatMailCanActuallyBeSentToTheAllocatedPort() throws Exception {
-        GreenMailUtil.sendTextEmail("to@localhost.com", "from@localhost.com", "subject", "body", smtpServerAtPort(greenMail.getSmtp().getPort()));
+    public void ensureThatMailCanActuallyBeSentToTheAllocatedPort() {
+        GreenMailUtil.sendTextEmail("to@localhost.com", "from@localhost.com", "subject", "body",
+                smtpServerAtPort(greenMail.getSmtp().getPort()));
 
         MimeMessage[] emails = greenMail.getReceivedMessages();
-        assertThat(emails.length, is(1));
+        assertThat(emails.length).isEqualTo(1);
     }
 
     private ServerSetup smtpServerAtPort(int port) {

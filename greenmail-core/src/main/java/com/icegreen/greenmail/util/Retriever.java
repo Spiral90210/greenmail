@@ -4,10 +4,12 @@
  */
 package com.icegreen.greenmail.util;
 
-import com.icegreen.greenmail.server.AbstractServer;
-
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import javax.mail.*;
-import java.util.*;
+
+import com.icegreen.greenmail.server.AbstractServer;
 
 /**
  * @author Wael Chatila
@@ -15,7 +17,7 @@ import java.util.*;
  * @since Apr 16, 2005
  */
 public class Retriever implements AutoCloseable {
-    private AbstractServer server;
+    private final AbstractServer server;
     private Store store;
 
     /**
@@ -32,6 +34,14 @@ public class Retriever implements AutoCloseable {
      * @param server the POP3 or IMAP server
      */
     public Retriever(AbstractServer server) {
+        if (null == server) {
+            throw new IllegalArgumentException("Expected non null server argument");
+        }
+        if (!(server.getProtocol().startsWith(ServerSetup.PROTOCOL_IMAP)
+                || server.getProtocol().startsWith(ServerSetup.PROTOCOL_POP3))) {
+            throw new IllegalArgumentException("Requires a " + ServerSetup.PROTOCOL_POP3 + " or " +
+                    ServerSetup.PROTOCOL_IMAP + " server but got " + server.getProtocol());
+        }
         this.server = server;
     }
 
@@ -52,22 +62,10 @@ public class Retriever implements AutoCloseable {
             fp.add(UIDFolder.FetchProfileItem.UID);
             rootFolder.fetch(rootFolder.getMessages(), fp);
 
-            return messages.toArray(new Message[messages.size()]);
+            return messages.toArray(new Message[0]);
         } catch (MessagingException e) {
             throw new RuntimeException(e);
         }
-    }
-
-    /**
-     * Closes the underlying store.
-     * Make sure you finished processing any fetched messages before closing!
-     *
-     * @deprecated use {@link #close()} instead.
-     * @since 1.5
-     */
-    @Deprecated
-    public void logout() {
-        close();
     }
 
     /**
@@ -78,11 +76,12 @@ public class Retriever implements AutoCloseable {
      */
     @Override
     public void close() {
-        try {
-            store.close();
-        } catch (MessagingException e) {
-            throw new RuntimeException(e);
-        }
+        if (null != store)
+            try {
+                store.close();
+            } catch (MessagingException e) {
+                throw new RuntimeException(e);
+            }
     }
 
     private List<Message> getMessages(Folder folder) throws MessagingException {

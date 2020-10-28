@@ -6,6 +6,14 @@
  */
 package com.icegreen.greenmail.imap;
 
+import java.util.*;
+import javax.mail.Flags;
+import javax.mail.Message;
+import javax.mail.MessagingException;
+import javax.mail.UIDFolder;
+import javax.mail.internet.MimeMessage;
+import javax.mail.search.SearchTerm;
+
 import com.icegreen.greenmail.foedus.util.MsgRangeFilter;
 import com.icegreen.greenmail.imap.commands.IdRange;
 import com.icegreen.greenmail.mail.MovingMessage;
@@ -14,155 +22,146 @@ import com.icegreen.greenmail.store.FolderListener;
 import com.icegreen.greenmail.store.MailFolder;
 import com.icegreen.greenmail.store.StoredMessage;
 
-import javax.mail.Flags;
-import javax.mail.Message;
-import javax.mail.MessagingException;
-import javax.mail.UIDFolder;
-import javax.mail.internet.MimeMessage;
-import javax.mail.search.SearchTerm;
-import java.util.*;
-
 public class ImapSessionFolder implements MailFolder, FolderListener, UIDFolder {
-    private MailFolder _folder;
-    private ImapSession _session;
-    private boolean _readonly;
-    private boolean _sizeChanged;
-    private final List<Integer> _expungedMsns = Collections.synchronizedList(new LinkedList<Integer>());
-    private final Map<Integer, FlagUpdate> _modifiedFlags = Collections.synchronizedMap(new TreeMap<Integer, FlagUpdate>());
+    private MailFolder folder;
+    private ImapSession session;
+    private boolean readonly;
+    private volatile boolean sizeChanged;
+    private final List<Integer> expungedMsns = Collections.synchronizedList(new LinkedList<Integer>());
+    private final Map<Integer, FlagUpdate> modifiedFlags = Collections.synchronizedMap(new TreeMap<Integer, FlagUpdate>());
 
     public ImapSessionFolder(MailFolder folder, ImapSession session, boolean readonly) {
-        _folder = folder;
-        _session = session;
-        _readonly = readonly;
+        this.folder = folder;
+        this.session = session;
+        this.readonly = readonly;
         // TODO make this a weak reference (or make sure deselect() is *always* called).
-        _folder.addListener(this);
+        this.folder.addListener(this);
     }
 
     public void deselect() {
-        _folder.removeListener(this);
-        _folder = null;
+        folder.removeListener(this);
+        folder = null;
     }
 
     @Override
     public int getMsn(long uid) throws FolderException {
-        long[] uids = _folder.getMessageUids();
+        long[] uids = folder.getMessageUids();
         for (int i = 0; i < uids.length; i++) {
             long messageUid = uids[i];
             if (uid == messageUid) {
                 return i + 1;
             }
         }
-        throw new FolderException("No such message.");
+        throw new FolderException("No such message with uid " + uid + " in folder " + folder.getName());
     }
 
     @Override
     public void signalDeletion() {
-        _folder.signalDeletion();
+        folder.signalDeletion();
     }
 
     @Override
     public List<StoredMessage> getMessages(MsgRangeFilter msgRangeFilter) {
-        return _folder.getMessages(msgRangeFilter);
+        return folder.getMessages(msgRangeFilter);
     }
 
     @Override
     public List<StoredMessage> getMessages() {
-        return _folder.getMessages();
+        return folder.getMessages();
     }
 
     @Override
     public List<StoredMessage> getNonDeletedMessages() {
-        return _folder.getNonDeletedMessages();
+        return folder.getNonDeletedMessages();
     }
 
     public boolean isReadonly() {
-        return _readonly;
+        return readonly;
     }
 
-    public int[] getExpunged() throws FolderException {
-        synchronized (_expungedMsns) {
-            int[] expungedMsns = new int[_expungedMsns.size()];
-            for (int i = 0; i < expungedMsns.length; i++) {
-                int msn = _expungedMsns.get(i);
-                expungedMsns[i] = msn;
+    public int[] getExpunged() {
+        synchronized (expungedMsns) {
+            int[] expungedMsnsArray = new int[this.expungedMsns.size()];
+            for (int i = 0; i < expungedMsnsArray.length; i++) {
+                int msn = this.expungedMsns.get(i);
+                expungedMsnsArray[i] = msn;
             }
-            _expungedMsns.clear();
+            this.expungedMsns.clear();
 
-            // TODO - renumber any cached ids (for now we assume the _modifiedFlags has been cleared)\
-            if (!(_modifiedFlags.isEmpty() && !_sizeChanged)) {
+            // TODO - renumber any cached ids (for now we assume the modifiedFlags has been cleared)\
+            if (!(modifiedFlags.isEmpty() && !sizeChanged)) {
                 throw new IllegalStateException("Need to do this properly...");
             }
-            return expungedMsns;
+            return expungedMsnsArray;
         }
     }
 
-    public List<ImapSessionFolder.FlagUpdate> getFlagUpdates() throws FolderException {
-        if (_modifiedFlags.isEmpty()) {
+    public List<ImapSessionFolder.FlagUpdate> getFlagUpdates() {
+        if (modifiedFlags.isEmpty()) {
             return Collections.emptyList();
         }
 
-        List<FlagUpdate> retVal = new ArrayList<>();
-        retVal.addAll(_modifiedFlags.values());
-        _modifiedFlags.clear();
+        List<FlagUpdate> retVal = new ArrayList<>(modifiedFlags.values());
+        modifiedFlags.clear();
         return retVal;
     }
 
     @Override
     public void expunged(int msn) {
-        synchronized (_expungedMsns) {
-            _expungedMsns.add(msn);
+        synchronized (expungedMsns) {
+            expungedMsns.add(msn);
         }
     }
 
     @Override
     public void added(int msn) {
-        _sizeChanged = true;
+        sizeChanged = true;
     }
 
     @Override
     public void flagsUpdated(int msn, Flags flags, Long uid) {
         // This will overwrite any earlier changes
-        _modifiedFlags.put(msn, new FlagUpdate(msn, uid, flags));
+        modifiedFlags.put(msn, new FlagUpdate(msn, uid, flags));
     }
 
     @Override
     public void mailboxDeleted() {
-        _session.closeConnection("Mailbox " + _folder.getName() + " has been deleted");
+        session.closeConnection("Mailbox " + folder.getName() + " has been deleted");
     }
 
     @Override
     public String getName() {
-        return _folder.getName();
+        return folder.getName();
     }
 
     @Override
     public String getFullName() {
-        return _folder.getFullName();
+        return folder.getFullName();
     }
 
     @Override
     public Flags getPermanentFlags() {
-        return _folder.getPermanentFlags();
+        return folder.getPermanentFlags();
     }
 
     @Override
     public int getMessageCount() {
-        return _folder.getMessageCount();
+        return folder.getMessageCount();
     }
 
     @Override
     public int getRecentCount(boolean reset) {
-        return _folder.getRecentCount(reset);
+        return folder.getRecentCount(reset);
     }
 
     @Override
     public long getUidValidity() {
-        return _folder.getUidValidity();
+        return folder.getUidValidity();
     }
 
     @Override
     public int getFirstUnseen() {
-        return correctForExpungedMessages(_folder.getFirstUnseen());
+        return correctForExpungedMessages(folder.getFirstUnseen());
     }
 
     /**
@@ -172,9 +171,9 @@ public class ImapSessionFolder implements MailFolder, FolderListener, UIDFolder 
      */
     private int correctForExpungedMessages(int absoluteMsn) {
         int correctedMsn = absoluteMsn;
-        // Loop throught the expunged list backwards, adjusting the msn as we go.
-        for (int i = _expungedMsns.size() - 1; i >= 0; i--) {
-            int expunged = _expungedMsns.get(i);
+        // Loop through the expunged list backwards, adjusting the msn as we go.
+        for (int i = expungedMsns.size() - 1; i >= 0; i--) {
+            int expunged = expungedMsns.get(i);
             if (expunged <= absoluteMsn) {
                 correctedMsn++;
             }
@@ -184,102 +183,102 @@ public class ImapSessionFolder implements MailFolder, FolderListener, UIDFolder 
 
     @Override
     public boolean isSelectable() {
-        return _folder.isSelectable();
+        return folder.isSelectable();
     }
 
     @Override
-    public long getUidNext() {
-        return _folder.getUidNext();
+    public long getUidNext() { // TODO: Remove in 1.7
+        return getUIDNext();
     }
 
     @Override
     public int getUnseenCount() {
-        return _folder.getUnseenCount();
+        return folder.getUnseenCount();
     }
 
     @Override
     public long appendMessage(MimeMessage message, Flags flags, Date receivedDate) {
-        return _folder.appendMessage(message, flags, receivedDate);
+        return folder.appendMessage(message, flags, receivedDate);
     }
 
     @Override
     public void store(MovingMessage mail) throws Exception {
-        _folder.store(mail);
+        folder.store(mail);
     }
 
     @Override
     public void store(MimeMessage mail) throws Exception {
-        _folder.store(mail);
+        folder.store(mail);
     }
 
     @Override
     public StoredMessage getMessage(long uid) {
-        return _folder.getMessage(uid);
+        return folder.getMessage(uid);
     }
 
     @Override
     public long[] getMessageUids() {
-        return _folder.getMessageUids();
+        return folder.getMessageUids();
     }
 
     @Override
     public void expunge() throws FolderException {
-        _folder.expunge();
+        folder.expunge();
     }
 
     @Override
     public void expunge(IdRange[] idRanges) {
-        _folder.expunge(idRanges);
+        folder.expunge(idRanges);
     }
 
     @Override
     public long[] search(SearchTerm searchTerm) {
-        return _folder.search(searchTerm);
+        return folder.search(searchTerm);
     }
 
     @Override
     public long copyMessage(long uid, MailFolder toFolder) throws FolderException {
-        return _folder.copyMessage(uid, toFolder);
+        return folder.copyMessage(uid, toFolder);
     }
 
     @Override
     public void addListener(FolderListener listener) {
-        _folder.addListener(listener);
+        folder.addListener(listener);
     }
 
     @Override
     public void removeListener(FolderListener listener) {
-        _folder.removeListener(listener);
+        folder.removeListener(listener);
     }
 
     @Override
     public void setFlags(Flags flags, boolean value, long uid, FolderListener silentListener, boolean addUid) throws FolderException {
-        _folder.setFlags(flags, value, uid, silentListener, addUid);
+        folder.setFlags(flags, value, uid, silentListener, addUid);
     }
 
     @Override
     public void replaceFlags(Flags flags, long uid, FolderListener silentListener, boolean addUid) throws FolderException {
-        _folder.replaceFlags(flags, uid, silentListener, addUid);
+        folder.replaceFlags(flags, uid, silentListener, addUid);
     }
 
     @Override
     public void deleteAllMessages() {
-        _folder.deleteAllMessages();
+        folder.deleteAllMessages();
     }
 
     public boolean isSizeChanged() {
-        return _sizeChanged;
+        return sizeChanged;
     }
 
     public void setSizeChanged(boolean sizeChanged) {
-        _sizeChanged = sizeChanged;
+        this.sizeChanged = sizeChanged;
     }
 
     private UIDFolder unwrapUIDFolder() {
-        if (_folder instanceof UIDFolder) {
-            return (UIDFolder) _folder;
+        if (folder instanceof UIDFolder) {
+            return (UIDFolder) folder;
         }
-        throw new IllegalStateException("No UIDFolder supported by "+_folder.getClass());
+        throw new IllegalStateException("No UIDFolder supported by "+ folder.getClass());
     }
 
     @Override
@@ -305,6 +304,11 @@ public class ImapSessionFolder implements MailFolder, FolderListener, UIDFolder 
     @Override
     public long getUID(Message message) throws MessagingException {
         return unwrapUIDFolder().getUID(message);
+    }
+
+    @Override
+    public long getUIDNext() {
+        return folder.getUIDNext();
     }
 
     static final class FlagUpdate {

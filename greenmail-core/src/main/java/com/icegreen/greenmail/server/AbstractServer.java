@@ -4,19 +4,21 @@
  */
 package com.icegreen.greenmail.server;
 
+import java.io.IOException;
+import java.net.*;
+import java.util.*;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import javax.mail.NoSuchProviderException;
+import javax.mail.Session;
+import javax.mail.Store;
+
 import com.icegreen.greenmail.Managers;
 import com.icegreen.greenmail.util.DummySSLServerSocketFactory;
 import com.icegreen.greenmail.util.ServerSetup;
 import com.icegreen.greenmail.util.Service;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import javax.mail.NoSuchProviderException;
-import javax.mail.Session;
-import javax.mail.Store;
-import java.io.IOException;
-import java.net.*;
-import java.util.*;
 
 /**
  * @author Wael Chatila
@@ -27,12 +29,13 @@ public abstract class AbstractServer extends Thread implements Service {
     protected final Logger log = LoggerFactory.getLogger(getClass());
     protected final InetAddress bindTo;
     protected ServerSocket serverSocket = null;
-    protected Managers managers;
-    protected ServerSetup setup;
+    protected static final int CLIENT_SOCKET_SO_TIMEOUT = 30 * 1000;
+    protected final Managers managers;
+    protected final ServerSetup setup;
     private final List<ProtocolHandler> handlers = Collections.synchronizedList(new ArrayList<ProtocolHandler>());
     private volatile boolean keepRunning = false;
     private volatile boolean running = false;
-    private final Object startupMonitor = new Object();
+    private final CountDownLatch startupMonitor = new CountDownLatch(1);
 
     protected AbstractServer(ServerSetup setup, Managers managers) {
         this.setup = setup;
@@ -71,9 +74,7 @@ public abstract class AbstractServer extends Thread implements Service {
             try {
                 socket.close(); // Do close if bind failed!
             } catch (IOException nested) {
-                if (log.isTraceEnabled()) {
-                    log.trace("Ignoring attempt to close connection", nested);
-                }
+                log.trace("Ignoring attempt to close connection", nested);
             }
             throw ex;
         }
@@ -85,9 +86,7 @@ public abstract class AbstractServer extends Thread implements Service {
         try {
             initServerSocket();
 
-            if (log.isDebugEnabled()) {
-                log.debug("Started " + getName());
-            }
+            log.debug("Started {}", getName());
 
             // Handle connections
             while (keepOn()) {
@@ -99,10 +98,7 @@ public abstract class AbstractServer extends Thread implements Service {
                         handleClientSocket(clientSocket);
                     }
                 } catch (IOException ignored) {
-                    //ignored
-                    if (log.isTraceEnabled()) {
-                        log.trace("Error while processing client socket for " + getName(), ignored);
-                    }
+                    log.trace("Error while processing client socket for {}", getName(), ignored);
                 }
             }
         } finally {
@@ -121,9 +117,7 @@ public abstract class AbstractServer extends Thread implements Service {
         } finally {
             // Notify everybody that we're ready to accept connections or failed to start.
             // Otherwise will run into startup timeout, see #waitTillRunning(long).
-            synchronized (startupMonitor) {
-                startupMonitor.notifyAll();
-            }
+            startupMonitor.countDown();
         }
     }
 
@@ -149,13 +143,12 @@ public abstract class AbstractServer extends Thread implements Service {
         }
     }
 
-    protected void handleClientSocket(Socket clientSocket) {
+    protected void handleClientSocket(Socket clientSocket) throws SocketException {
+        clientSocket.setSoTimeout(CLIENT_SOCKET_SO_TIMEOUT);
         final ProtocolHandler handler = createProtocolHandler(clientSocket);
         addHandler(handler);
         String threadName = getName() + "<-" + clientSocket.getInetAddress() + ":" + clientSocket.getPort();
-        if(log.isDebugEnabled()) {
-            log.debug("Handling new client connection "+threadName);
-        }
+        log.debug("Handling new client connection {}", threadName);
         final Thread thread = new Thread(new Runnable() {
             @Override
             public void run() {
@@ -193,9 +186,7 @@ public abstract class AbstractServer extends Thread implements Service {
      * Quits server by closing server socket and closing client socket handlers.
      */
     protected synchronized void quit() {
-        if (log.isDebugEnabled()) {
-            log.debug("Stopping " + getName());
-        }
+        log.debug("Stopping {}", getName());
         closeServerSocket();
 
         // Close all handlers. Handler threads terminate if run loop exits
@@ -205,9 +196,7 @@ public abstract class AbstractServer extends Thread implements Service {
             }
             handlers.clear();
         }
-        if (log.isDebugEnabled()) {
-            log.debug("Stopped " + getName());
-        }
+        log.debug("Stopped {}", getName());
     }
 
     public String getBindTo() {
@@ -233,15 +222,7 @@ public abstract class AbstractServer extends Thread implements Service {
 
     @Override
     public boolean waitTillRunning(long timeoutInMs) throws InterruptedException {
-        long t = System.currentTimeMillis();
-        synchronized (startupMonitor) {
-            // Loop to avoid spurious wake ups, see
-            // https://www.securecoding.cert.org/confluence/display/java/THI03-J.+Always+invoke+wait%28%29+and+await%28%29+methods+inside+a+loop
-            while (!isRunning() && System.currentTimeMillis() - t < timeoutInMs) {
-                startupMonitor.wait(timeoutInMs);
-            }
-        }
-
+        startupMonitor.await(timeoutInMs, TimeUnit.MILLISECONDS);
         return isRunning();
     }
 
@@ -289,7 +270,9 @@ public abstract class AbstractServer extends Thread implements Service {
             }
         } catch (InterruptedException e) {
             //its possible that the thread exits between the lines keepRunning=false and interrupt above
-            log.warn("Got interrupted while stopping " + toString(), e);
+            log.warn("Got interrupted while stopping {}", this, e);
+
+            Thread.currentThread().interrupt();
         }
     }
 

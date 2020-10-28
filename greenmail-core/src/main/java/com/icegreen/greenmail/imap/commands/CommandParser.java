@@ -6,19 +6,20 @@
  */
 package com.icegreen.greenmail.imap.commands;
 
-import com.icegreen.greenmail.imap.ImapConstants;
-import com.icegreen.greenmail.imap.ImapRequestLineReader;
-import com.icegreen.greenmail.imap.ProtocolException;
-import com.icegreen.greenmail.store.MessageFlags;
-import com.sun.mail.imap.protocol.BASE64MailboxDecoder; // NOSONAR
-
-import javax.mail.Flags;
+import java.nio.charset.Charset;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
+import javax.mail.Flags;
+
+import com.icegreen.greenmail.imap.ImapConstants;
+import com.icegreen.greenmail.imap.ImapRequestLineReader;
+import com.icegreen.greenmail.imap.ProtocolException;
+import com.icegreen.greenmail.store.MessageFlags;
+import com.sun.mail.imap.protocol.BASE64MailboxDecoder;
 
 /**
  * @author Darrell DeBoer <darrell@apache.org>
@@ -38,7 +39,14 @@ public class CommandParser {
      * Reads an argument of type "atom" from the request.
      */
     public String atom(ImapRequestLineReader request) throws ProtocolException {
-        return consumeWord(request, new ATOM_CHARValidator());
+        return consumeWord(request, new AtomCharValidator());
+    }
+
+    /**
+     * Reads an argument of type "atom" from the request. Stops reading when non-atom chars are read.
+     */
+    public String atomOnly(ImapRequestLineReader request) throws ProtocolException {
+        return consumeWordOnly(request, new AtomCharValidator());
     }
 
     /**
@@ -59,6 +67,23 @@ public class CommandParser {
                 return consumeQuoted(request);
             case '{':
                 return consumeLiteral(request);
+            default:
+                return atom(request);
+        }
+    }
+
+    /**
+     * Reads an argument of type "string" from the request.
+     * <p>
+     * string          = quoted / literal
+     */
+    public String string(ImapRequestLineReader request, Charset charset) throws ProtocolException {
+        char next = request.nextWordChar();
+        switch (next) {
+            case '"':
+                return consumeQuoted(request);
+            case '{':
+                return new String(consumeLiteralAsBytes(request), charset);
             default:
                 return atom(request);
         }
@@ -150,6 +175,29 @@ public class CommandParser {
         return atom.toString();
     }
 
+    /**
+     * Reads the next "word from the request, comprising all characters up to the next SPACE.
+     * Characters are tested by the supplied CharacterValidator, and
+     * if invalid characters are encountered these are not consumed.
+     */
+    protected String consumeWordOnly(ImapRequestLineReader request,
+                                     CharacterValidator validator)
+            throws ProtocolException {
+        StringBuilder atom = new StringBuilder();
+
+        char next = request.nextWordChar();
+        while (!isWhitespace(next)) {
+            if (validator.isValid(next)) {
+                atom.append(next);
+                request.consume();
+            } else {
+                return atom.toString();
+            }
+            next = request.nextChar();
+        }
+        return atom.toString();
+    }
+
     private boolean isWhitespace(char next) {
         return next == ' ' || next == '\n' || next == '\r' || next == '\t';
     }
@@ -173,7 +221,6 @@ public class CommandParser {
      */
     protected String consumeLiteral(ImapRequestLineReader request)
             throws ProtocolException {
-
         return new String(consumeLiteralAsBytes(request));
     }
 
@@ -219,7 +266,6 @@ public class CommandParser {
      * TODO we're being liberal, the spec insists on \r\n for new lines.
      *
      * @param request the imap request
-     * @throws ProtocolException
      */
     private void consumeCRLF(ImapRequestLineReader request)
             throws ProtocolException {
@@ -292,7 +338,7 @@ public class CommandParser {
         return flags;
     }
 
-    public void setFlag(String flagString, Flags flags) throws ProtocolException {
+    public void setFlag(String flagString, Flags flags) {
         if (flagString.equalsIgnoreCase(MessageFlags.ANSWERED)) {
             flags.add(Flags.Flag.ANSWERED);
         } else if (flagString.equalsIgnoreCase(MessageFlags.DELETED)) {
@@ -414,7 +460,7 @@ public class CommandParser {
         }
     }
 
-    protected class ATOM_CHARValidator implements CharacterValidator {
+    protected class AtomCharValidator implements CharacterValidator {
         @Override
         public boolean isValid(char chr) {
             return isCHAR(chr) && !isAtomSpecial(chr) &&
@@ -438,7 +484,19 @@ public class CommandParser {
         }
     }
 
-    private class TagCharValidator extends ATOM_CHARValidator {
+    protected boolean isAtomSpecial(final char next) {
+        // atom-specials   = "(" / ")" / "{" / SP / CTL / list-wildcards /
+        //                  quoted-specials / resp-specials
+        return next == '(' || next == ')' || next == '{'
+                || next == ' ' // SP
+                || next == '%' || next == '*' // list-wildcards
+                || (next >= 0 && next <= 1F) || next == 7F // CTL
+                || next == '"' // quoted-specials = DQUOTE / "\"
+                || next == ']'  // resp-specials
+                ;
+    }
+
+    private class TagCharValidator extends AtomCharValidator {
         @Override
         public boolean isValid(char chr) {
             return chr != '+' && super.isValid(chr);

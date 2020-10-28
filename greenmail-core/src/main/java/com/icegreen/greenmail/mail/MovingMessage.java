@@ -6,10 +6,7 @@
  */
 package com.icegreen.greenmail.mail;
 
-import com.icegreen.greenmail.foedus.util.Resource;
-import com.icegreen.greenmail.foedus.util.Workspace;
 import com.icegreen.greenmail.util.GreenMailUtil;
-import com.icegreen.greenmail.util.InternetPrintWriter;
 
 import javax.mail.internet.MimeMessage;
 import java.io.*;
@@ -19,27 +16,12 @@ import java.util.List;
 
 /**
  * Contains information for delivering a mime email.
- * <p/>
- * <p/>
- * Since a MovingMessage many be passed through many queues and
- * handlers before it can be safely deleted, destruction it handled
- * by reference counting. When an object first obtains a reference
- * to a MovingMessage, it should immediately call {@link #acquire()}.
- * As soon as it has finished processing, that object must call
- * {@link #releaseContent()}.
- * </p>
  */
 public class MovingMessage {
     private MailAddress returnPath;
     private List<MailAddress> toAddresses = new LinkedList<>();
-    private Workspace _workspace;
-    private Resource _content;
     private MimeMessage message;
-    private int _references = 0;
-
-    public MovingMessage(Workspace workspace) {
-        _workspace = workspace;
-    }
+    private String content;
 
     public List<MailAddress> getToAddresses() {
         return toAddresses;
@@ -49,27 +31,15 @@ public class MovingMessage {
         return message;
     }
 
-    public Reader getContent()
-            throws IOException {
-
-        return _content.getReader();
-    }
-
-    public void acquire() {
-        _references++;
+    public Reader getContent() {
+        return new StringReader(content);
     }
 
     public void releaseContent() {
-        if (_references > 0) {
-            _references--;
-        } else if (_content != null) {
-            _workspace.release(_content);
-            _content = null;
-        }
+        content = "";
     }
 
     public MailAddress getReturnPath() {
-
         return returnPath;
     }
 
@@ -97,9 +67,7 @@ public class MovingMessage {
      */
     public void readDotTerminatedContent(BufferedReader in)
             throws IOException {
-        _content = _workspace.getTmpFile();
-        Writer data = _content.getWriter();
-        PrintWriter dataWriter = new InternetPrintWriter(data);
+        StringBuilder buf = new StringBuilder();
 
         while (true) {
             String line = in.readLine();
@@ -107,19 +75,22 @@ public class MovingMessage {
                 throw new EOFException("Did not receive <CRLF>.<CRLF>");
 
             if (".".equals(line)) {
-                dataWriter.close();
-
                 break;
             } else if (line.startsWith(".")) {
-                dataWriter.println(line.substring(1));
+                println(buf, line.substring(1));
             } else {
-                dataWriter.println(line);
+                println(buf, line);
             }
         }
+        content = buf.toString();
         try {
-            message = GreenMailUtil.newMimeMessage(_content.getAsString());
+            message = GreenMailUtil.newMimeMessage(content);
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
+    }
+
+    private void println(StringBuilder buf, String line) {
+        buf.append(line).append("\r\n");
     }
 }

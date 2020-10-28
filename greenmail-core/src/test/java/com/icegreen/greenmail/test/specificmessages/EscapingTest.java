@@ -12,11 +12,8 @@ import org.junit.Test;
 import javax.mail.Message;
 import javax.mail.MessagingException;
 import javax.mail.Session;
-import java.io.IOException;
 
-import static org.hamcrest.CoreMatchers.is;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertThat;
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Tests escaping of message parts
@@ -26,7 +23,7 @@ public class EscapingTest {
     public GreenMailRule greenMail = new GreenMailRule(ServerSetupTest.SMTP_POP3_IMAP);
 
     @Test
-    public void testEscapeSubject() throws MessagingException, IOException {
+    public void testEscapeSubject() throws MessagingException {
         String to = "to@localhost";
         String subject = "Subject?<>/|\\\\.%\\\"*?:{[]}!";
         greenMail.setUser(to, to);
@@ -39,7 +36,7 @@ public class EscapingTest {
     }
 
     @Test
-    public void testEscapeMessageID() throws MessagingException, IOException {
+    public void testEscapeMessageID() throws MessagingException {
         String to = "foo@localhost";
         String from = "bar`bar <bar@localhost>";
         String subject = "Bad IMAP Envelope";
@@ -68,16 +65,16 @@ public class EscapingTest {
      * @param subject Subject of message
      */
     private void retrieveAndCheck(AbstractServer server, String to, String from, String subject)
-            throws MessagingException, IOException {
+            throws MessagingException {
         try (Retriever retriever = new Retriever(server)) {
             Message[] messages = retriever.getMessages(to);
-            assertEquals(1, messages.length);
+            assertThat(messages.length).isEqualTo(1);
             Message message = messages[0];
 
             // Message subject
-            assertThat(message.getSubject(), is(subject));
-            assertThat(message.getAllRecipients()[0].toString(), is(to));
-            assertThat(message.getFrom()[0].toString(), is(from));
+            assertThat(message.getSubject()).isEqualTo(subject);
+            assertThat(message.getAllRecipients()[0].toString()).isEqualTo(to);
+            assertThat(message.getFrom()[0].toString()).isEqualTo(from);
         }
     }
 }

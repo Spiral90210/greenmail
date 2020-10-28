@@ -16,50 +16,59 @@ import com.icegreen.greenmail.user.UserManager;
 
 
 public class Pop3State {
-    UserManager _manager;
-    GreenMailUser _user;
-    MailFolder _inbox;
+    UserManager manager;
+    GreenMailUser user;
+    MailFolder inbox;
     private ImapHostManager imapHostManager;
 
     public Pop3State(UserManager manager) {
-        _manager = manager;
+        this.manager = manager;
         this.imapHostManager = manager.getImapHostManager();
-
     }
 
     public GreenMailUser getUser() {
-
-        return _user;
+        return user;
     }
 
     public GreenMailUser getUser(String username) throws UserException {
-        GreenMailUser user = _manager.getUser(username);
+        GreenMailUser user = manager.getUser(username);
         if (null == user) {
-            throw new NoSuchUserException(username + " doesn't exist");
+            throw new NoSuchUserException("User <" + username + "> doesn't exist");
         }
         return user;
     }
 
-    public void setUser(GreenMailUser user)
-            throws UserException {
-        _user = user;
+    public void setUser(GreenMailUser user) {
+        this.user = user;
     }
 
     public boolean isAuthenticated() {
-        return _inbox != null;
+        return inbox != null;
     }
 
     public void authenticate(String pass)
             throws UserException, FolderException {
-        if (_user == null)
+        if (user == null)
             throw new UserException("No user selected");
 
-        _user.authenticate(pass);
-        _inbox = imapHostManager.getInbox(_user);
+        if (manager.isAuthRequired()) {
+            user.authenticate(pass);
+        }
+        inbox = imapHostManager.getInbox(user);
     }
 
     public MailFolder getFolder() {
-
-        return _inbox;
+        return inbox;
     }
+
+    public GreenMailUser findOrCreateUser(String username) throws UserException {
+        if (manager.hasUser(username)) {
+            return manager.getUser(username);
+        }
+        if (!manager.isAuthRequired()) {
+            return manager.createUser(username, username, username);
+        }
+        throw new UserException("Unable to find or create user '" + username +"'");
+    }
+
 }

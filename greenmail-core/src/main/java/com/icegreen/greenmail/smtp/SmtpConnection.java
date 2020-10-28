@@ -6,18 +6,19 @@
  */
 package com.icegreen.greenmail.smtp;
 
+import java.io.*;
+import java.net.InetAddress;
+import java.net.Socket;
+import java.nio.charset.StandardCharsets;
+
 import com.icegreen.greenmail.util.EncodingUtil;
 import com.icegreen.greenmail.util.InternetPrintWriter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.*;
-import java.net.InetAddress;
-import java.net.Socket;
-
 public class SmtpConnection {
 
-    private static final int TIMEOUT_MILLIS = 1000 * 30;
+
     private static final Logger log = LoggerFactory.getLogger(SmtpConnection.class);
 
     // networking/io stuff
@@ -27,24 +28,22 @@ public class SmtpConnection {
     BufferedReader in;
     SmtpHandler handler;
     String heloName;
+    boolean authenticated; // Was there a successful authentication?
 
     public SmtpConnection(SmtpHandler handler, Socket sock)
             throws IOException {
         this.sock = sock;
-        sock.setSoTimeout(TIMEOUT_MILLIS);
         clientAddress = sock.getInetAddress();
         OutputStream o = sock.getOutputStream();
         InputStream i = sock.getInputStream();
         out = InternetPrintWriter.createForEncoding(o, true, EncodingUtil.CHARSET_EIGHT_BIT_ENCODING);
-        in = new BufferedReader(new InputStreamReader(i));
+        in = new BufferedReader(new InputStreamReader(i, StandardCharsets.US_ASCII));
 
         this.handler = handler;
     }
 
     public void send(String line) {
-        if (log.isTraceEnabled()) {
-            log.trace("S: " + line);
-        }
+        log.trace("S: {}", line);
         out.println(line);
     }
 
@@ -55,9 +54,7 @@ public class SmtpConnection {
     public String receiveLine()
             throws IOException {
         String line = in.readLine();
-        if (log.isTraceEnabled()) {
-            log.trace("C: " + line);
-        }
+        log.trace("C: {}", line);
 
         return line;
     }
@@ -88,5 +85,23 @@ public class SmtpConnection {
 
     public void quit() {
         handler.close();
+    }
+
+    /**
+     * Checks if there was a successful authentication for this connection.
+     *
+     * @return true, if authenticated
+     */
+    public boolean isAuthenticated() {
+        return authenticated;
+    }
+
+    /**
+     * Sets the authentication state of this connection.
+     *
+     * @param authenticated true,
+     */
+    public void setAuthenticated(boolean authenticated) {
+        this.authenticated = authenticated;
     }
 }

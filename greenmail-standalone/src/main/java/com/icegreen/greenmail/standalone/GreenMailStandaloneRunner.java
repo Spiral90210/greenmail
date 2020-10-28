@@ -39,8 +39,8 @@ public class GreenMailStandaloneRunner {
 
         } else {
             greenMail = new GreenMail(serverSetup);
-            log.info("Starting GreenMail standalone v" + BuildInfo.INSTANCE.getProjectVersion() +
-                    " using " + Arrays.toString(serverSetup));
+            log.info("Starting GreenMail standalone v{} using {}",
+                    BuildInfo.INSTANCE.getProjectVersion(), Arrays.toString(serverSetup));
             greenMail.withConfiguration(new PropertiesBasedGreenMailConfigurationBuilder().build(properties))
                     .start();
         }
@@ -83,6 +83,8 @@ public class GreenMailStandaloneRunner {
                 {"-Dgreenmail.auth.disabled ", "Disables authentication check so that any password works."},
                 {"Also automatically provisions previously non-existent users."},
                 {"-Dgreenmail.verbose ", "Enables verbose mode, including JavaMail debug output"},
+                {"-Dgreenmail.startup.timeout=<TIMEOUT_IN_MILLISECS>",
+                        "Overrides the default server startup timeout of 1000ms."},
         };
         for (String[] opt : options) {
             if (opt.length == 1) {

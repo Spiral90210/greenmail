@@ -6,17 +6,15 @@
  */
 package com.icegreen.greenmail.imap.commands;
 
+import java.nio.charset.UnsupportedCharsetException;
+import javax.mail.search.SearchTerm;
+
 import com.icegreen.greenmail.imap.ImapRequestLineReader;
 import com.icegreen.greenmail.imap.ImapResponse;
 import com.icegreen.greenmail.imap.ImapSession;
 import com.icegreen.greenmail.imap.ProtocolException;
 import com.icegreen.greenmail.store.FolderException;
 import com.icegreen.greenmail.store.MailFolder;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import javax.mail.search.SearchTerm;
-import java.nio.charset.CharacterCodingException;
 
 /**
  * Handles processing for the SEARCH imap command.
@@ -24,11 +22,10 @@ import java.nio.charset.CharacterCodingException;
  * @author Darrell DeBoer <darrell@apache.org>
  */
 class SearchCommand extends SelectedStateCommand implements UidEnabledCommand {
-    protected final Logger log = LoggerFactory.getLogger(getClass());
     public static final String NAME = "SEARCH";
     public static final String ARGS = "<search term>";
 
-    private SearchCommandParser parser = new SearchCommandParser();
+    private final SearchCommandParser searchParser = new SearchCommandParser();
 
     SearchCommand() {
         super(NAME, ARGS);
@@ -49,26 +46,26 @@ class SearchCommand extends SelectedStateCommand implements UidEnabledCommand {
                           boolean useUids)
             throws ProtocolException, FolderException {
         // Parse the search term from the request
-        SearchTerm searchTerm = null;
+        final SearchTerm searchTerm;
         try {
-            searchTerm = parser.searchTerm(request);
-        } catch(IllegalArgumentException ex) {
+            searchTerm = searchParser.searchTerm(request);
+        } catch (UnsupportedCharsetException e) {
+            // Not support => return "NO"
+            response.commandFailed(this, "Search command does not support charset " + e.getMessage());
+            return;
+        } catch (IllegalArgumentException ex) {
             // Not support => return "BAD"
             response.commandError("Search command not supported");
             return;
-        } catch (CharacterCodingException e) {
-            // Not support => return "BAD"
-            response.commandError("Search command does not support charset "+e.getMessage());
-            return;
         }
 
-        if(null == searchTerm) {
+        if (null == searchTerm) {
             log.warn("Ignoring unsupported search command");
             response.commandComplete(this);
             return;
         }
 
-        parser.endLine(request);
+        searchParser.endLine(request);
 
         MailFolder folder = session.getSelected();
         long[] uids = folder.search(searchTerm);

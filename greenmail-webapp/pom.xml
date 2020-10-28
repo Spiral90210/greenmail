@@ -2,15 +2,15 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>com.icegreen</groupId>
   <artifactId>greenmail-webapp</artifactId>
-  <version>1.6.0-SNAPSHOT</version>
+  <version>1.6.1-SNAPSHOT</version>
   <packaging>war</packaging>
   <name>== Greenmail Webapp ==</name>
   <description>Embedded GreenMail Webapp</description>
-  
+
   <parent>
     <groupId>com.icegreen</groupId>
     <artifactId>greenmail-parent</artifactId>
-    <version>1.6.0-SNAPSHOT</version>
+    <version>1.6.1-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
@@ -21,13 +21,35 @@
     </dependency>
     <dependency>
       <groupId>javax.servlet</groupId>
-      <artifactId>servlet-api</artifactId>
+      <artifactId>javax.servlet-api</artifactId>
       <scope>provided</scope>
     </dependency>
+    <dependency>
+      <groupId>org.glassfish.jersey.core</groupId>
+      <artifactId>jersey-server</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.glassfish.jersey.containers</groupId>
+      <artifactId>jersey-container-servlet-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.glassfish.jersey.inject</groupId>
+      <artifactId>jersey-hk2</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.glassfish.jersey.containers</groupId>
+      <artifactId>jersey-container-jetty-http</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.glassfish.jersey.media</groupId>
+      <artifactId>jersey-media-json-jackson</artifactId>
+    </dependency>
+
     <!-- Test scope -->
     <dependency>
       <groupId>junit</groupId>
       <artifactId>junit</artifactId>
+      <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.easymock</groupId>
@@ -35,8 +57,18 @@
       <scope>test</scope>
     </dependency>
     <dependency>
-      <groupId>org.easymock</groupId>
-      <artifactId>easymockclassextension</artifactId>
+      <groupId>org.eclipse.jetty</groupId>
+      <artifactId>jetty-server</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.eclipse.jetty</groupId>
+      <artifactId>jetty-webapp</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.eclipse.jetty</groupId>
+      <artifactId>jetty-util</artifactId>
       <scope>test</scope>
     </dependency>
 
@@ -61,7 +93,20 @@
           <archive>
             <addMavenDescriptor>true</addMavenDescriptor>
           </archive>
+          <webResources>
+            <resource>
+              <directory>src/main/webapp</directory>
+              <includes>
+                <include>greenmail-openapi.yml</include>
+              </includes>
+              <filtering>true</filtering>
+            </resource>
+          </webResources>
         </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.eclipse.jetty</groupId>
+        <artifactId>jetty-maven-plugin</artifactId>
       </plugin>
     </plugins>
   </build>

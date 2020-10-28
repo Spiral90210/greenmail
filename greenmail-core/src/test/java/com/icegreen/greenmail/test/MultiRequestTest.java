@@ -5,6 +5,9 @@
 */
 package com.icegreen.greenmail.test;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import com.icegreen.greenmail.junit.GreenMailRule;
 import com.icegreen.greenmail.server.AbstractServer;
 import com.icegreen.greenmail.util.GreenMailUtil;
@@ -15,10 +18,7 @@ import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
-import java.util.List;
-
-import static org.junit.Assert.*;
+import static org.assertj.core.api.Assertions.*;
 
 /**
  * Test multiple senders and receivers using all available protocols
@@ -51,7 +51,7 @@ public class MultiRequestTest {
 
     private static class RetrieverThread extends Thread {
         String to;
-        int count;
+        volatile int count;
         private int expectedCount;
         private AbstractServer server;
 
@@ -89,14 +89,14 @@ public class MultiRequestTest {
     //~ END INNER CLASSES -----------------------------------------------
 
     @Test
-    public void test20Senders() throws InterruptedException {
+    public void test20Senders() {
         final int num = 20;
         addUsers(num);
         startSenderThreads(num);
         final int tot = (num * (num + 1) / 2);
-        assertTrue(greenMail.waitForIncomingEmail(15000, tot));
+        assertThat(greenMail.waitForIncomingEmail(15000, tot)).isTrue();
         // No more mails can arrive now
-        assertFalse(greenMail.waitForIncomingEmail(1000, tot + 1));
+        assertThat(greenMail.waitForIncomingEmail(1000, tot + 1)).isFalse();
     }
 
     @Test
@@ -107,7 +107,7 @@ public class MultiRequestTest {
 
         // Now wait for senders to finish and mails to arrive
         final int sentMessages = (num * (num + 1) / 2);
-        assertTrue(greenMail.waitForIncomingEmail(15000, sentMessages));
+        assertThat(greenMail.waitForIncomingEmail(15000, sentMessages)).isTrue();
 
         // Then start receivers
         ThreadGroup group = new ThreadGroup(RetrieverThread.class.getName());
@@ -119,7 +119,7 @@ public class MultiRequestTest {
         checkRetrieverThreadsMessagesArrived(sentMessages * 4, retrieverThreads);
 
         // But the total number of messages sent is still the same as above
-        assertTrue(greenMail.waitForIncomingEmail(5000, sentMessages));
+        assertThat(greenMail.waitForIncomingEmail(5000, sentMessages)).isTrue();
     }
 
     @Test
@@ -139,7 +139,7 @@ public class MultiRequestTest {
         checkRetrieverThreadsMessagesArrived(sentMessages * 4, retrieverThreads);
 
         // Correct number of received messages
-        assertTrue(greenMail.waitForIncomingEmail(5000, sentMessages));
+        assertThat(greenMail.waitForIncomingEmail(5000, sentMessages)).isTrue();
     }
 
     /**
@@ -164,7 +164,7 @@ public class MultiRequestTest {
         ThreadGroup senders = new ThreadGroup("SenderThreads") {
             @Override
             public void uncaughtException(final Thread t, final Throwable e) {
-                log.error("Exception in thread \"" + t.getName(), e);
+                log.error("Exception in thread \"{}\"", t.getName(), e);
             }
         };
         for (int i = 1; i <= n; i++) {
@@ -230,6 +230,6 @@ public class MultiRequestTest {
         for (RetrieverThread retrieverThread : retrieverThreads) {
             sum += retrieverThread.getCount();
         }
-        assertEquals(receivedMessages, sum);
+        assertThat(sum).isEqualTo(receivedMessages);
     }
 }

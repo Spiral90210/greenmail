@@ -5,8 +5,8 @@ import com.icegreen.greenmail.util.ServerSetup;
 import com.icegreen.greenmail.util.ServerSetupTest;
 import org.junit.Test;
 
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.fail;
 
 /**
  * Test that checks if greenmail start, stop and reset works correctly
@@ -33,7 +33,7 @@ public class ServerStartStopTest {
     @Test
     public void testServerStartupTimeout() {
         // Create a few setups
-        ServerSetup setups[] = new ServerSetup[ServerSetupTest.ALL.length];
+        ServerSetup[] setups = new ServerSetup[ServerSetupTest.ALL.length];
 
         // Set too low startup timeout
         for(int i=0;i<ServerSetupTest.ALL.length;i++) {
@@ -47,7 +47,7 @@ public class ServerStartStopTest {
             service.start();
             fail("Expected timeout");
         } catch (IllegalStateException ex) {
-            assertTrue(ex.getMessage().contains("try to set server startup timeout > "));
+            assertThat(ex.getMessage().contains("try to set server startup timeout > ")).isTrue();
         } finally {
             service.stop();
         }

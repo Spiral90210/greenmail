@@ -4,7 +4,7 @@
   <description>Docker image running GreenMail Standalone</description>
 
   <artifactId>greenmail-docker-standalone</artifactId>
-  <version>1.6.0-SNAPSHOT</version>
+  <version>1.6.1-SNAPSHOT</version>
   <!-- Does not actually provide a JAR, but requires the JAR Maven lifecycle
        for unit test -->
   <packaging>jar</packaging>
@@ -16,7 +16,7 @@
   <parent>
     <groupId>com.icegreen</groupId>
     <artifactId>greenmail-parent</artifactId>
-    <version>1.6.0-SNAPSHOT</version>
+    <version>1.6.1-SNAPSHOT</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
@@ -70,13 +70,14 @@
         <artifactId>docker-maven-plugin</artifactId>
         <configuration>
           <autoPull>true</autoPull>
+          <autoRemove>true</autoRemove>
           <verbose>true</verbose>
           <images>
             <image>
               <name>greenmail/standalone:${project.version}</name>
               <build>
                 <tags>${greenmail.docker.tags}</tags>
-                <dockerFileDir>${basedir}</dockerFileDir>
+                <contextDir>${basedir}</contextDir>
               </build>
               <run>
                 <ports>
@@ -89,7 +90,8 @@
                 </ports>
                 <wait>
                   <tcp>
-                    <host>0.0.0.0</host>
+                    <mode>mapped</mode>
+                    <host>${docker.host.address}</host>
                     <ports>
                       <port>3025</port>
                       <port>3110</port>
@@ -101,6 +103,7 @@
                   </tcp>
                   <time>10000</time>
                 </wait>
+                <containerNamePattern>${project.artifactId}-%i</containerNamePattern>
               </run>
             </image>
           </images>

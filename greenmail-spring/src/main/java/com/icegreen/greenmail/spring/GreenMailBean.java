@@ -1,5 +1,9 @@
 package com.icegreen.greenmail.spring;
 
+import java.util.ArrayList;
+import java.util.List;
+import javax.mail.internet.MimeMessage;
+
 import com.icegreen.greenmail.util.GreenMail;
 import com.icegreen.greenmail.util.GreenMailUtil;
 import com.icegreen.greenmail.util.ServerSetup;
@@ -9,13 +13,9 @@ import org.springframework.beans.factory.BeanNameAware;
 import org.springframework.beans.factory.DisposableBean;
 import org.springframework.beans.factory.InitializingBean;
 
-import javax.mail.internet.MimeMessage;
-import java.util.ArrayList;
-import java.util.List;
-
 /**
  * Spring bean for GreenMail server.
- * <p/>
+ * <p>
  * By default,
  * <ul>
  *  <li>SMTP, POP3 services are activated</li>
@@ -56,9 +56,9 @@ public class GreenMailBean implements InitializingBean, DisposableBean, BeanName
     private String hostname;
     /** If the server is started. */
     private boolean started;
-    /** Outoing mail server setup. */
+    /** Outgoing mail server setup. */
     private ServerSetup smtpServerSetup;
-    /** Outoing secure mail server setup. */
+    /** Outgoing secure mail server setup. */
     private ServerSetup smtpsServerSetup;
     /** Timeout to wait for server startup in millis */
     private long serverStartupTimeout = 1000L;
@@ -83,7 +83,7 @@ public class GreenMailBean implements InitializingBean, DisposableBean, BeanName
                 String pwd = user.substring(posColon + 1, posAt);
                 String domain = user.substring(posAt + 1);
                 if (log.isDebugEnabled()) {
-                    log.debug("Adding user " + login + ':' + pwd + '@' + domain);
+                    log.debug("Adding user {}:{}@{}" ,login, pwd, domain);
                 }
                 greenMail.setUser(login + '@' + domain, login, pwd);
             }
@@ -95,7 +95,7 @@ public class GreenMailBean implements InitializingBean, DisposableBean, BeanName
     }
 
     /**
-     * Creates the server setup, depending on the protocoll flags.
+     * Creates the server setup, depending on the protocol flags.
      *
      * @return the configured server setups.
      */
@@ -384,7 +384,7 @@ public class GreenMailBean implements InitializingBean, DisposableBean, BeanName
 
     /**
      * Sends a mail message to the GreenMail server.
-     * <p/>
+     * <p>
      * Note: SMTP or SMTPS must be configured.
      *
      * @param theTo      the <em>TO</em> field.

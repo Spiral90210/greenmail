@@ -14,8 +14,8 @@ package com.icegreen.greenmail.imap.commands;
  * <li>ALL All messages in the mailbox; the default initial key for ANDing</li>
  * <li>ANSWERED Messages with the \Answered flag set.</li>
  * <li>BCC Messages that contain the specified string in the envelope structure's BCC field.</li>
- * <li>TODO: BEFORE &lt;date&gt;  Messages whose internal date (disregarding time and timezone) is earlier than the specified date.</li>
- * <li>TODO: BODY &lt;string&gt; Messages that contain the specified string in the body of the message.</li>
+ * <li>BEFORE &lt;date&gt;  Messages whose internal date (disregarding time and timezone) is earlier than the specified date.</li>
+ * <li>BODY &lt;string&gt; Messages that contain the specified string in the body of the message.</li>
  * <li>CC &lt;string&gt; Messages that contain the specified string in the envelope structure's CC field.</li>
  * <li>DELETED Messages with the \Deleted flag set.</li>
  * <li>DRAFT Messages with the \Draft flag set.</li>
@@ -25,19 +25,19 @@ package com.icegreen.greenmail.imap.commands;
  * that contains the specified string in the text of the header (what comes after the colon). If the string to search is
  * zero-length, this matches all messages that have a header line with the specified field-name regardless of the contents.</li>
  * <li>KEYWORD &lt;flag&gt; Messages with the specified keyword flag set.</li>
- * <li>TODO: LARGER &lt;n&gt; Messages with an [RFC-2822] size larger than the specified number of octets.</li>
+ * <li>LARGER &lt;n&gt; Messages with an [RFC-2822] size larger than the specified number of octets.</li>
  * <li>NEW Messages that have the \Recent flag set but not the \Seen flag. This is functionally equivalent to "(RECENT UNSEEN)".</li>
  * <li>NOT &lt;search-key&gt; Messages that do not match the specified search key.</li>
  * <li>OLD Messages that do not have the \Recent flag set.  This is functionally equivalent to "NOT RECENT" (as opposed to "NOT NEW").</li>
- * <li>TODO: ON &lt;date&gt; Messages whose internal date (disregarding time and timezone) is within the specified date.</li>
- * <li>TODO: OR &lt;search-key1&gt; &lt;search-key2&gt;  Messages that match either search key.</li>
+ * <li>ON &lt;date&gt; Messages whose internal date (disregarding time and timezone) is within the specified date.</li>
+ * <li>OR &lt;search-key1&gt; &lt;search-key2&gt;  Messages that match either search key.</li>
  * <li>RECENT Messages that have the \Recent flag set.</li>
  * <li>SEEN Messages that have the \Seen flag set.</li>
- * <li>TODO: SENTBEFORE &lt;date&gt; Messages whose [RFC-2822] Date: header (disregarding time and timezone) is earlier than the specified date.</li>
- * <li>TODO: SENTON &lt;date&gt; Messages whose [RFC-2822] Date: header (disregarding time and timezone) is within the specified date.</li>
- * <li>TODO: SENTSINCE &lt;date&gt; Messages whose [RFC-2822] Date: header (disregarding time and timezone) is within or later than the specified date.</li>
- * <li>TODO: SINCE &lt;date&gt; Messages whose internal date (disregarding time and timezone) is within or later than the specified date.</li>
- * <li>TODO: SMALLER &lt;n&gt; Messages with an [RFC-2822] size smaller than the specified number of octets.</li>
+ * <li>SENTBEFORE &lt;date&gt; Messages whose [RFC-2822] Date: header (disregarding time and timezone) is earlier than the specified date.</li>
+ * <li>SENTON &lt;date&gt; Messages whose [RFC-2822] Date: header (disregarding time and timezone) is within the specified date.</li>
+ * <li>SENTSINCE &lt;date&gt; Messages whose [RFC-2822] Date: header (disregarding time and timezone) is within or later than the specified date.</li>
+ * <li>SINCE &lt;date&gt; Messages whose internal date (disregarding time and timezone) is within or later than the specified date.</li>
+ * <li>SMALLER &lt;n&gt; Messages with an [RFC-2822] size smaller than the specified number of octets.</li>
  * <li>SUBJECT &lt;string&gt; Messages that contain the specified string in the envelope structure's SUBJECT field.</li>
  * <li>TEXT &lt;string&gt; Messages that contain the specified string in the header or body of the message.</li>
  * <li>TO &lt;string&gt; Messages that contain the specified string in the envelope structure's TO field.</li>
@@ -69,6 +69,7 @@ public enum SearchKey {
     ALL(),
     ANSWERED(),
     BCC(1, true),
+    BODY(1, true),
     CC(1, true),
     DELETED(),
     DRAFT(),
@@ -95,7 +96,16 @@ public enum SearchKey {
      * &lt;sequence set&gt; - Messages with message sequence numbers corresponding
      * to the specified message sequence number set.
      */
-    SEQUENCE_SET(1);
+    SEQUENCE_SET(1),
+    OR(2),
+    SINCE(1),
+    ON(1),
+    BEFORE(1),
+    SENTSINCE(1),
+    SENTON(1),
+    SENTBEFORE(1),
+    LARGER(1),
+    SMALLER(1);
 
     private int minArgs = 0; // expected additional arguments
     private boolean operator = false; // Is an operator, such as AND, OR, NOT ...

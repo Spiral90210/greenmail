@@ -11,6 +11,16 @@ import org.junit.runner.Description;
 import org.junit.runners.model.FrameworkMethod;
 import org.junit.runners.model.Statement;
 
+/**
+ * GreenMail JUnit 4 rule for hooking GreenMail into test lifecycle (startup GreenMail, shutdown GreenMail).
+ * <p>
+ * The rule ensures that each test method starts with a clean GreenMail instance without
+ * relics from previous tests of current suite.
+ * <p>
+ *
+ * @deprecated Use com.icegreen.greenmail.junit4.GreenMailRule of module greenmail-junit4. Will be removed in GreenMail 2.0 .
+ */
+@Deprecated
 public class GreenMailRule extends GreenMailProxy implements MethodRule, TestRule {
     private GreenMail greenMail;
     private final ServerSetup[] serverSetups;

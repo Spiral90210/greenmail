@@ -7,16 +7,16 @@
 package com.icegreen.greenmail.store;
 
 
+import java.util.*;
+import javax.mail.BodyPart;
+import javax.mail.MessagingException;
+import javax.mail.internet.*;
+
 import com.icegreen.greenmail.mail.MailAddress;
 import com.icegreen.greenmail.util.GreenMailUtil;
 import com.sun.mail.imap.protocol.INTERNALDATE;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import javax.mail.BodyPart;
-import javax.mail.MessagingException;
-import javax.mail.internet.*;
-import java.util.*;
 
 /**
  * Attributes of a Message in IMAP4rev1 style. Message
@@ -24,7 +24,7 @@ import java.util.*;
  * <p> Note that the message in a mailbox have the same order using either
  * Message Sequence Numbers or UIDs.
  * <p> reinitialize() must be called on deserialization to reset Logger
- * <p/>
+ *
  * Reference: RFC 2060 - para 2.3 https://www.ietf.org/rfc/rfc2060.txt
  *
  * @author <a href="mailto:sascha@kulawik.de">Sascha Kulawik</a>
@@ -124,7 +124,8 @@ public class SimpleMessageAttributes
      * TODO this is a mess, and should be completely revamped.
      */
     void parseMimePart(MimePart part) throws MessagingException {
-        size = GreenMailUtil.getBody(part).length();
+        final String body = GreenMailUtil.getBody(part);
+        size = body.length();
 
         // Section 1 - Message Headers
         if (part instanceof MimeMessage) {
@@ -148,7 +149,7 @@ public class SimpleMessageAttributes
 //            if (DEBUG) getLogger().debug("Messaging Exception for getHeader(Sender): " + me);
         }
         try {
-            replyTo = part.getHeader("Reply To");
+            replyTo = part.getHeader("Reply-To");
         } catch (MessagingException me) {
 //            if (DEBUG) getLogger().debug("Messaging Exception for getHeader(Reply To): " + me);
         }
@@ -222,7 +223,7 @@ public class SimpleMessageAttributes
 
         try {
             // TODO this doesn't work
-            lineCount = getLineCount(part);
+            lineCount = GreenMailUtil.getLineCount(body);
         } catch (Exception e) {
             if (log.isDebugEnabled()) {
                 log.debug("Can not get line count for part " + part, e);
@@ -264,13 +265,9 @@ public class SimpleMessageAttributes
                     throw new IllegalStateException("Can not extract part for "+primaryType+"/"+secondaryType, e);
                 }
             } else {
-                log.warn("Unknown/unhandled subtype " + secondaryType + " of message encountered.");
+                log.warn("Unknown/unhandled subtype {} of message encountered.", secondaryType);
             }
         }
-    }
-
-    private int getLineCount(MimePart part) throws MessagingException {
-        return GreenMailUtil.getLineCount(GreenMailUtil.getBody(part));
     }
 
     /**
@@ -362,44 +359,42 @@ public class SimpleMessageAttributes
      * Parses a String email address to an IMAP address string.
      */
     private String parseAddress(String address) {
-        int comma = address.indexOf(',');
-        StringBuilder buf = new StringBuilder();
-        if (comma == -1) { //single address
-            buf.append(LB);
-            InternetAddress netAddr;
-            try {
-                netAddr = new InternetAddress(address);
-            } catch (AddressException ae) {
-                log.warn("Can not parse address " + address + " - ignored.", ae);
-                return null;
-            }
-            String personal = netAddr.getPersonal();
-            if (personal != null && (personal.length() != 0)) {
-                buf.append(Q).append(personal).append(Q);
-            } else {
-                buf.append(NIL);
-            }
-            buf.append(SP);
-            buf.append(NIL); // should add route-addr
-            buf.append(SP);
-            try {
-                // Remove quotes to avoid double quoting
-                MailAddress mailAddr = new MailAddress(netAddr.getAddress().replaceAll("\"", "\\\\\""));
-                buf.append(Q).append(mailAddr.getUser()).append(Q);
-                buf.append(SP);
-                buf.append(Q).append(mailAddr.getHost()).append(Q);
-            } catch (Exception pe) {
-                buf.append(NIL + SP + NIL);
-            }
-            buf.append(RB);
-        } else {
-            buf.append(parseAddress(address.substring(0, comma)));
-            buf.append(SP);
-            buf.append(parseAddress(address.substring(comma + 1)));
-        }
-        return buf.toString();
-    }
+        try {
+            StringBuilder buf = new StringBuilder();
+            InternetAddress[] netAddrs = InternetAddress.parseHeader(address, false);
+            for (InternetAddress netAddr : netAddrs) {
+                if (buf.length() > 0) {
+                    buf.append(SP);
+                }
 
+                buf.append(LB);
+
+                String personal = netAddr.getPersonal();
+                if (personal != null && (personal.length() != 0)) {
+                    buf.append(Q).append(personal).append(Q);
+                } else {
+                    buf.append(NIL);
+                }
+                buf.append(SP);
+                buf.append(NIL); // should add route-addr
+                buf.append(SP);
+                try {
+                    // Remove quotes to avoid double quoting
+                    MailAddress mailAddr = new MailAddress(netAddr.getAddress().replaceAll("\"", "\\\\\""));
+                    buf.append(Q).append(mailAddr.getUser()).append(Q);
+                    buf.append(SP);
+                    buf.append(Q).append(mailAddr.getHost()).append(Q);
+                } catch (Exception pe) {
+                    buf.append(NIL + SP + NIL);
+                }
+                buf.append(RB);
+            }
+
+            return buf.toString();
+        } catch (AddressException e) {
+            throw new RuntimeException("Failed to parse address: " + address, e);
+        }
+    }
 
     /**
      * Decode a content Type header line into types and parameters pairs
@@ -515,7 +510,11 @@ public class SimpleMessageAttributes
                 getParameters(buf);
                 //4. body id -------
                 buf.append(' ');
-                buf.append(NIL);
+                if (null != contentID ) {
+                    buf.append(Q).append(contentID).append(Q);
+                } else {
+                    buf.append(NIL);
+                }
                 //5. content desc -------
                 buf.append(' ');
                 if (null != contentDesc) {
@@ -643,14 +642,14 @@ public class SimpleMessageAttributes
 
         public Header(String line) {
             String[] strs = line.split(";");
-            value = strs[0];
             if (0 != strs.length) {
+                value = strs[0];
                 params = new HashSet<>(strs.length);
                 for (int i = 1; i < strs.length; i++) {
                     String p = strs[i].trim();
                     int e = p.indexOf('=');
                     String key = p.substring(0, e);
-                    String val = p.substring(e + 1, p.length());
+                    String val = p.substring(e + 1);
                     p = Q + strip(key) + Q + SP + Q + strip(val) + Q;
                     params.add(p);
                 }
@@ -667,15 +666,16 @@ public class SimpleMessageAttributes
 
         @Override
         public String toString() {
+            // https://tools.ietf.org/html/rfc3501#section-9 body-fld-dsp
             StringBuilder ret = new StringBuilder();
             if (null == params) {
                 ret.append(Q).append(value).append(Q);
             } else {
+                ret.append(LB);
+                ret.append(Q).append(value).append(Q + SP);
                 if (params.isEmpty()) {
                     ret.append(NIL);
                 } else {
-                    ret.append(LB);
-                    ret.append(Q).append(value).append(Q + SP);
                     ret.append(LB);
                     int i = 0;
                     for (String param : params) {
@@ -685,8 +685,8 @@ public class SimpleMessageAttributes
                         ret.append(param);
                     }
                     ret.append(RB);
-                    ret.append(RB);
                 }
+                ret.append(RB);
             }
             return ret.toString();
         }

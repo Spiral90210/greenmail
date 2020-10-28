@@ -6,105 +6,107 @@
  */
 package com.icegreen.greenmail.pop3;
 
+import java.io.IOException;
+import java.net.Socket;
+import java.net.SocketTimeoutException;
+import java.util.StringTokenizer;
 
 import com.icegreen.greenmail.pop3.commands.Pop3Command;
 import com.icegreen.greenmail.pop3.commands.Pop3CommandRegistry;
 import com.icegreen.greenmail.server.BuildInfo;
 import com.icegreen.greenmail.server.ProtocolHandler;
 import com.icegreen.greenmail.user.UserManager;
-
-import java.io.IOException;
-import java.net.Socket;
-import java.net.SocketTimeoutException;
-import java.util.StringTokenizer;
-
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class Pop3Handler implements ProtocolHandler {
-    Pop3CommandRegistry _registry;
-    Pop3Connection _conn;
-    UserManager _manager;
-    Pop3State _state;
-    boolean _quitting;
-    String _currentLine;
-    private Socket _socket;
+    protected final Logger log = LoggerFactory.getLogger(getClass());
+    Pop3CommandRegistry registry;
+    Pop3Connection conn;
+    UserManager manager;
+    Pop3State state;
+    boolean quitting;
+    String currentLine;
+    private Socket socket;
 
     public Pop3Handler(Pop3CommandRegistry registry,
                        UserManager manager, Socket socket) {
-        _registry = registry;
-        _manager = manager;
-        _socket = socket;
+        this.registry = registry;
+        this.manager = manager;
+        this.socket = socket;
     }
 
     @Override
     public void run() {
         try {
-            _conn = new Pop3Connection(this, _socket);
-            _state = new Pop3State(_manager);
+            conn = new Pop3Connection(this, socket);
+            state = new Pop3State(manager);
 
-            _quitting = false;
+            quitting = false;
 
             sendGreetings();
 
-            while (!_quitting) {
+            while (!quitting) {
                 handleCommand();
             }
 
-            _conn.close();
+            conn.close();
         } catch (SocketTimeoutException ste) {
-            _conn.println("421 Service shutting down and closing transmission channel");
-
+            conn.println("421 Service shutting down and closing transmission channel");
         } catch (Exception e) {
+            if (!quitting) {
+                log.error("Can not handle POP3 connection", e);
+                throw new IllegalStateException("Can not handle POP3 connection", e);
+            }
         } finally {
             try {
-                _socket.close();
+                socket.close();
             } catch (IOException ioe) {
+                // Nothing
             }
         }
 
     }
 
     void sendGreetings() {
-        _conn.println("+OK POP3 GreenMail Server v" + BuildInfo.INSTANCE.getProjectVersion() + " ready");
+        conn.println("+OK POP3 GreenMail Server v" + BuildInfo.INSTANCE.getProjectVersion() + " ready");
     }
 
     void handleCommand()
             throws IOException {
-        _currentLine = _conn.readLine();
+        currentLine = conn.readLine();
 
-        if (_currentLine == null) {
+        if (currentLine == null) {
             close();
 
             return;
         }
 
-        String commandName = new StringTokenizer(_currentLine, " ").nextToken()
-                .toUpperCase();
+        String commandName = new StringTokenizer(currentLine, " ").nextToken().toUpperCase();
 
-        Pop3Command command = _registry.getCommand(commandName);
+        Pop3Command command = registry.getCommand(commandName);
 
         if (command == null) {
-            _conn.println("-ERR Command not recognized");
-
+            conn.println("-ERR Command not recognized");
             return;
         }
 
-        if (!command.isValidForState(_state)) {
-            _conn.println("-ERR Command not valid for this state");
-
+        if (!command.isValidForState(state)) {
+            conn.println("-ERR Command not valid for this state");
             return;
         }
 
-        command.execute(_conn, _state, _currentLine);
+        command.execute(conn, state, currentLine);
     }
 
     @Override
     public void close() {
-         _quitting = true;
+        quitting = true;
         try {
-            if (_socket != null && !_socket.isClosed()) {
-                _socket.close();
+            if (socket != null && !socket.isClosed()) {
+                socket.close();
             }
-        } catch(IOException ignored) {
+        } catch (IOException ignored) {
             //empty
         }
     }

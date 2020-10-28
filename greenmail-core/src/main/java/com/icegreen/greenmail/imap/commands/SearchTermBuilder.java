@@ -1,18 +1,38 @@
 package com.icegreen.greenmail.imap.commands;
 
-import com.icegreen.greenmail.store.StoredMessage;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import java.text.DateFormat;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Date;
+import java.util.List;
+import java.util.Locale;
 
 import javax.mail.Flags;
 import javax.mail.Message;
 import javax.mail.internet.AddressException;
 import javax.mail.internet.InternetAddress;
-import javax.mail.search.*;
+import javax.mail.search.AndTerm;
+import javax.mail.search.BodyTerm;
+import javax.mail.search.ComparisonTerm;
+import javax.mail.search.FlagTerm;
+import javax.mail.search.FromStringTerm;
+import javax.mail.search.FromTerm;
+import javax.mail.search.HeaderTerm;
+import javax.mail.search.OrTerm;
+import javax.mail.search.ReceivedDateTerm;
 import javax.mail.search.RecipientStringTerm;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
+import javax.mail.search.RecipientTerm;
+import javax.mail.search.SearchTerm;
+import javax.mail.search.SentDateTerm;
+import javax.mail.search.SizeTerm;
+import javax.mail.search.SubjectTerm;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.icegreen.greenmail.store.StoredMessage;
 
 /**
  * Builder for search terms.
@@ -22,13 +42,16 @@ import java.util.List;
 public abstract class SearchTermBuilder {
     private SearchKey key;
     private List<String> parameters = Collections.<String>emptyList();
-
+    private static final Logger LOGGER = LoggerFactory.getLogger(SearchTermBuilder.class);
+    public static final AllSearchTerm ALL_SEARCH_TERM = new AllSearchTerm();
+    
     public static SearchTermBuilder create(final String pTerm) {
         return create(SearchKey.valueOf(pTerm));
     }
 
     public static SearchTermBuilder create(final SearchKey key) {
         SearchTermBuilder builder;
+        LOGGER.debug("Creating search term for '{}'", key);
         switch (key) {
             // Non flags first
             case HEADER:
@@ -36,7 +59,7 @@ public abstract class SearchTermBuilder {
                 break;
             // Flags
             case ALL:
-                builder = createSearchTermBuilder(new AllSearchTerm());
+                builder = createSearchTermBuilder(ALL_SEARCH_TERM);
                 break;
             case ANSWERED:
                 builder = createFlagSearchTermBuilder("ANSWERED", true);
@@ -76,6 +99,9 @@ public abstract class SearchTermBuilder {
             case SUBJECT:
                 builder = createSubjectTermBuilder();
                 break;
+            case BODY:
+                builder = createBodySearchTermBuilder();
+                break;
             case TEXT:
                 builder = createTextSearchTermBuilder();
                 break;
@@ -107,6 +133,33 @@ public abstract class SearchTermBuilder {
             case SEQUENCE_SET:
                 builder = createSequenceSetTermBuilder();
                 break;
+            case OR:
+                builder = createORTermBuilder();
+                break;
+            case SINCE:
+                builder = createReceivedDateTermBuilder(ComparisonTerm.GE);
+                break;
+            case ON:
+                builder = createReceivedDateTermBuilder(ComparisonTerm.EQ);
+                break;
+            case BEFORE:
+                builder = createReceivedDateTermBuilder(ComparisonTerm.LT);
+                break;
+            case SENTSINCE:
+                builder = createSentDateTermBuilder(ComparisonTerm.GE);
+                break;
+            case SENTON:
+                builder = createSentDateTermBuilder(ComparisonTerm.EQ);
+                break;
+            case SENTBEFORE:
+                builder = createSentDateTermBuilder(ComparisonTerm.LT);
+                break;
+            case LARGER:
+                builder = createMessageSizeTermBuilder(ComparisonTerm.GT);
+                break;
+            case SMALLER:
+                builder = createMessageSizeTermBuilder(ComparisonTerm.LT);
+                break;
             default:
                 throw new IllegalStateException("Unsupported search term '" + key + '\'');
         }
@@ -114,6 +167,64 @@ public abstract class SearchTermBuilder {
         return builder;
     }
 
+    private static SearchTermBuilder createSentDateTermBuilder(final int searchTerm) {
+        return new SearchTermBuilder() {
+            @Override
+            public SearchTerm build() {
+                return new SentDateTerm(searchTerm, parseDate(getParameters()));
+            }
+        };
+    }
+
+    private static SearchTermBuilder createReceivedDateTermBuilder(final int searchTerm) {
+        return new SearchTermBuilder() {
+            @Override
+            public SearchTerm build() {
+                return new ReceivedDateTerm(searchTerm, parseDate(getParameters()));
+            }
+        };
+    }
+
+    private static SearchTermBuilder createMessageSizeTermBuilder(final int searchTerm) {
+        return new SearchTermBuilder() {
+            @Override
+            public SearchTerm build() {
+                return new SizeTerm(searchTerm, SearchTermBuilder.parseInteger(getParameters()));
+            }
+        };
+    }
+
+    private static Date parseDate(List<String> parameters) {
+        DateFormat df = new SimpleDateFormat("dd-MMM-yyyy", Locale.ENGLISH);
+        String date = parameters.get(0);
+        try {
+            Date d = df.parse(date);
+            LOGGER.debug("Using date '{}'.", d);
+            return d;
+        } catch (ParseException e) {
+            throw new IllegalArgumentException("Unable to parse date '" + date+"'",e);
+        }
+    }
+
+    private static int parseInteger(List<String> parameters) {
+        String integer = parameters.get(0);
+        try {
+            int i = Integer.parseInt(integer);
+            LOGGER.debug("Using date '{}'.", i);
+            return i;
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("Unable to parse integer '" + integer + "'",e);
+        }
+    }
+
+	private static SearchTermBuilder createORTermBuilder() {
+			 return new SearchTermBuilder() {
+	            @Override
+	            public SearchTerm build() {
+                return new OrTerm(new SubjectTerm(getParameters().get(0)),new SubjectTerm(getParameters().get(1)));
+	            }
+	        };	}
+    
     private void setSearchKey(final SearchKey pKey) {
         key = pKey;
     }
@@ -175,6 +286,15 @@ public abstract class SearchTermBuilder {
         };
     }
 
+    private static SearchTermBuilder createBodySearchTermBuilder() {
+        return new SearchTermBuilder() {
+            @Override
+            public SearchTerm build() {
+                String query = getParameters().get(0);
+                return new BodyTerm(query);
+            }
+        };
+    }
     private static SearchTermBuilder createTextSearchTermBuilder() {
         return new SearchTermBuilder() {
             @Override
@@ -386,9 +506,10 @@ public abstract class SearchTermBuilder {
                 return match(uid);
             } else {
                 final Logger log = LoggerFactory.getLogger(UidSearchTerm.class);
-                log.warn("No uid support for message " + msg + ", failing to match.");
+                log.warn("No uid support for message {}, failing to match.", msg);
                 return false;
             }
         }
     }
+
 }

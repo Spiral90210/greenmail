@@ -38,7 +38,7 @@ class FetchCommand extends SelectedStateCommand implements UidEnabledCommand {
     private static final Flags FLAGS_SEEN = new Flags(Flags.Flag.SEEN);
     private static final Pattern NUMBER_MATCHER = Pattern.compile("^\\d+$");
 
-    private FetchCommandParser parser = new FetchCommandParser();
+    private FetchCommandParser fetchParser = new FetchCommandParser();
 
     FetchCommand() {
         super(NAME, ARGS);
@@ -58,9 +58,9 @@ class FetchCommand extends SelectedStateCommand implements UidEnabledCommand {
                           ImapSession session,
                           boolean useUids)
             throws ProtocolException, FolderException {
-        IdRange[] idSet = parser.parseIdRange(request);
-        FetchRequest fetch = parser.fetchRequest(request);
-        parser.endLine(request);
+        IdRange[] idSet = fetchParser.parseIdRange(request);
+        FetchRequest fetch = fetchParser.fetchRequest(request);
+        fetchParser.endLine(request);
 
         if (useUids) {
             fetch.uid = true;
@@ -91,7 +91,7 @@ class FetchCommand extends SelectedStateCommand implements UidEnabledCommand {
         response.commandComplete(this);
     }
 
-    private String getMessageData(boolean useUids, FetchRequest fetch, ImapSessionFolder mailbox, long uid) throws FolderException, ProtocolException {
+    private String getMessageData(boolean useUids, FetchRequest fetch, ImapSessionFolder mailbox, long uid) throws FolderException {
         StoredMessage storedMessage = mailbox.getMessage(uid);
         return outputMessage(fetch, storedMessage, mailbox, useUids);
     }
@@ -99,7 +99,7 @@ class FetchCommand extends SelectedStateCommand implements UidEnabledCommand {
 
     private String outputMessage(FetchRequest fetch, StoredMessage message,
                                  ImapSessionFolder folder, boolean useUids)
-            throws FolderException, ProtocolException {
+            throws FolderException {
         // Check if this fetch will cause the "SEEN" flag to be set on this message
         // If so, update the flags, and ensure that a flags response is included in the response.
         boolean ensureFlagsResponse = false;
@@ -299,7 +299,9 @@ class FetchCommand extends SelectedStateCommand implements UidEnabledCommand {
         response.append("\r\n");
 
         for (byte b : bytes) {
-            response.append((char) b);
+            // See https://github.com/greenmail-mail-test/greenmail/issues/257
+            final char c = (char) (b & 0xFF);
+            response.append(c);
         }
     }
 
@@ -529,8 +531,8 @@ class FetchCommand extends SelectedStateCommand implements UidEnabledCommand {
     }
     /** See https://tools.ietf.org/html/rfc3501#page-55 : partial */
     private static class Partial {
-        int start,
-            size;
+        int start;
+        int size;
 
         int computeLength(final int contentSize) {
             if ( size > 0) {
